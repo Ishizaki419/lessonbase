@@ -1,0 +1,6 @@
+---
+pid: 1900
+cwd: |
+  C:\Users\User
+---
+PS C:\Users\User>
