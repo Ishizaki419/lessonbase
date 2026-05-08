@@ -8,6 +8,7 @@ import { Header } from "@/components/Header";
 type StudentOption = {
   id: string;
   name: string;
+  email: string | null;
 };
 
 type BookingRow = {
@@ -63,7 +64,7 @@ export default function BookingsPage() {
   const [status, setStatus] = useState<(typeof BOOKING_STATUSES)[number]>("確定");
 
   const fetchStudents = async () => {
-    const { data, error } = await supabase.from("students").select("id, name").order("name");
+    const { data, error } = await supabase.from("students").select("id, name, email").order("name");
     if (error) {
       setErrorMessage("生徒一覧の取得に失敗しました。");
       return;
@@ -185,6 +186,29 @@ export default function BookingsPage() {
     setEndTime("");
     setMemo("");
     setStatus("確定");
+
+    if (!editingBookingId) {
+      const selectedStudent = students.find((student) => student.id === studentId);
+      if (selectedStudent?.email) {
+        try {
+          await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: selectedStudent.email,
+              studentName: selectedStudent.name,
+              bookingDate,
+              startTime,
+              endTime,
+              status
+            })
+          });
+        } catch {
+          // Booking creation should remain successful even if email fails.
+        }
+      }
+    }
+
     await fetchBookings();
     setIsSubmitting(false);
   };
