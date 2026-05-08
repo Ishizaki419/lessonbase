@@ -20,7 +20,7 @@ type BookingRow = {
   created_at: string;
   students: {
     name: string;
-  }[];
+  };
 };
 
 type BookingInsert = {
@@ -312,7 +312,7 @@ export default function BookingsPage() {
               <li key={booking.id} className="rounded border border-gray-200 bg-white p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold">
-                    {booking.students[0]?.name ?? "不明な生徒"}
+                    {booking.students?.name ?? "不明な生徒"}
                   </span>
                   <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
                     {booking.status}
