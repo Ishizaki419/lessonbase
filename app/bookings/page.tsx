@@ -159,7 +159,7 @@ export default function BookingsPage() {
     };
 
     setIsSubmitting(true);
-    const { error } = await supabase.from("bookings").insert<BookingInsert>(newBooking);
+    const { error } = await supabase.from("bookings").insert(newBooking);
 
     if (error) {
       setErrorMessage("予約の追加に失敗しました。");

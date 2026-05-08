@@ -1,9 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-let _supabase: ReturnType<typeof createClient> | null = null;
+let _supabase: SupabaseClient<Database> | null = null;
 
 export function getSupabase() {
   // Avoid throwing at import time (e.g. during build) to keep CI/Vercel logs readable.
@@ -14,7 +16,7 @@ export function getSupabase() {
       "Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
     );
   }
-  _supabase = createClient(supabaseUrl, supabaseAnonKey);
+  _supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
   return _supabase;
 }
 
