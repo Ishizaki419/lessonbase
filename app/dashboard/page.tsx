@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { AppHeader } from "@/components/AppHeader";
+import { Header } from "@/components/Header";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -71,12 +72,28 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppHeader onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+      <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-semibold text-gray-900">ダッシュボード</h1>
           <p className="mt-2 text-gray-700">今日の日付: {today}</p>
         </div>
+        <section className="mt-6 grid gap-4 md:grid-cols-2">
+          <Link
+            href="/students"
+            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <h2 className="text-xl font-semibold text-gray-900">生徒管理</h2>
+            <p className="mt-2 text-sm text-gray-600">生徒情報の登録・確認を行います。</p>
+          </Link>
+          <Link
+            href="/bookings"
+            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <h2 className="text-xl font-semibold text-gray-900">予約管理</h2>
+            <p className="mt-2 text-sm text-gray-600">予約の追加・確認を行います。</p>
+          </Link>
+        </section>
       </main>
     </div>
   );

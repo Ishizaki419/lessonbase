@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { AppHeader } from "@/components/AppHeader";
+import { Header } from "@/components/Header";
 
 type Student = {
   id: string;
@@ -133,7 +133,7 @@ export default function StudentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppHeader onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+      <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <h1 className="text-2xl font-semibold">生徒一覧</h1>
 
