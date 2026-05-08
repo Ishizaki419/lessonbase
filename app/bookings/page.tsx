@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 type StudentOption = {
   id: string;
@@ -20,13 +20,14 @@ type BookingRow = {
   created_at: string;
   students: {
     name: string;
-  } | null;
+  }[];
 };
 
 const BOOKING_STATUSES = ["確定", "キャンセル", "完了"] as const;
 
 export default function BookingsPage() {
   const router = useRouter();
+  const supabase = getSupabase();
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -300,7 +301,7 @@ export default function BookingsPage() {
               <li key={booking.id} className="rounded border border-gray-200 bg-white p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold">
-                    {booking.students?.name ?? "不明な生徒"}
+                    {booking.students[0]?.name ?? "不明な生徒"}
                   </span>
                   <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
                     {booking.status}

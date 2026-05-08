@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 type Student = {
   id: string;
@@ -15,6 +15,7 @@ type Student = {
 
 export default function StudentsPage() {
   const router = useRouter();
+  const supabase = getSupabase();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
