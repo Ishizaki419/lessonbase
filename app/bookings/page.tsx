@@ -23,6 +23,15 @@ type BookingRow = {
   }[];
 };
 
+type BookingInsert = {
+  student_id: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+  memo: string | null;
+  status: "確定" | "キャンセル" | "完了";
+};
+
 const BOOKING_STATUSES = ["確定", "キャンセル", "完了"] as const;
 
 export default function BookingsPage() {
@@ -140,15 +149,17 @@ export default function BookingsPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    const { error } = await supabase.from("bookings").insert({
+    const newBooking: BookingInsert = {
       student_id: studentId,
       booking_date: bookingDate,
       start_time: startTime,
       end_time: endTime,
       memo: memo.trim() || null,
       status
-    });
+    };
+
+    setIsSubmitting(true);
+    const { error } = await supabase.from("bookings").insert<BookingInsert>(newBooking);
 
     if (error) {
       setErrorMessage("予約の追加に失敗しました。");
