@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { AppHeader } from "@/components/AppHeader";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -69,19 +70,15 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <h1 className="text-2xl font-semibold">ダッシュボード</h1>
-      <p className="mt-2 text-gray-700">今日の日付: {today}</p>
-
-      <button
-        type="button"
-        onClick={handleLogout}
-        disabled={isLoggingOut}
-        className="mt-6 rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isLoggingOut ? "ログアウト中..." : "ログアウト"}
-      </button>
-    </main>
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+      <main className="mx-auto max-w-5xl p-6">
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-semibold text-gray-900">ダッシュボード</h1>
+          <p className="mt-2 text-gray-700">今日の日付: {today}</p>
+        </div>
+      </main>
+    </div>
   );
 }
 

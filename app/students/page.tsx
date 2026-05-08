@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { AppHeader } from "@/components/AppHeader";
 
 type Student = {
   id: string;
@@ -19,6 +20,7 @@ export default function StudentsPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -111,6 +113,16 @@ export default function StudentsPage() {
     setIsSubmitting(false);
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.replace("/login");
+      setIsLoggingOut(false);
+    }
+  };
+
   if (isCheckingAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -120,8 +132,10 @@ export default function StudentsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-6">
-      <h1 className="text-2xl font-semibold">生徒一覧</h1>
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+      <main className="mx-auto max-w-5xl p-6">
+        <h1 className="text-2xl font-semibold">生徒一覧</h1>
 
       {errorMessage && (
         <div className="mt-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -231,7 +245,8 @@ export default function StudentsPage() {
           </div>
         )}
       </section>
-    </main>
+      </main>
+    </div>
   );
 }
 
