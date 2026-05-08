@@ -6,19 +6,20 @@ import { useRouter } from "next/navigation";
 
 import { getSupabase } from "@/lib/supabase";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const supabase = getSupabase();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
 
-  const [authError, setAuthError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const isEmailValidFormat = useMemo(() => {
-    // Simple RFC-5322-ish check: practical validation for UI input.
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   }, [email]);
 
@@ -31,15 +32,8 @@ export default function LoginPage() {
       if (data.session) router.replace("/dashboard");
     })();
 
-    const { data: authListenerData } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session) router.replace("/dashboard");
-      }
-    );
-
     return () => {
       cancelled = true;
-      authListenerData.subscription.unsubscribe();
     };
   }, [router]);
 
@@ -48,7 +42,6 @@ export default function LoginPage() {
     setAuthError(null);
 
     const trimmedEmail = email.trim();
-
     if (!trimmedEmail) {
       setValidationError("メールアドレスを入力してください。");
       return false;
@@ -65,31 +58,33 @@ export default function LoginPage() {
       setValidationError("パスワードは8文字以上で入力してください。");
       return false;
     }
-
+    if (password !== passwordConfirm) {
+      setValidationError("パスワード確認が一致しません。");
+      return false;
+    }
     return true;
   };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
     if (!validate()) return;
 
     setIsLoading(true);
     try {
-      const trimmedEmail = email.trim();
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password
       });
 
       if (error) {
-        setAuthError("メールアドレスまたはパスワードが違います");
-        setPassword(""); // spec: password clear on failure
+        setAuthError(error.message);
         return;
       }
 
-      router.replace("/dashboard");
+      setSuccessMessage("登録が完了しました。ログインしてください。");
+      setTimeout(() => {
+        router.replace("/login");
+      }, 1200);
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +102,12 @@ export default function LoginPage() {
           {(validationError || authError) && (
             <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {validationError ?? authError}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {successMessage}
             </div>
           )}
 
@@ -133,36 +134,45 @@ export default function LoginPage() {
               <input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2.5 text-sm outline-none transition focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
-                placeholder="********"
+                placeholder="8文字以上"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="passwordConfirm">
+                パスワード確認
+              </label>
+              <input
+                id="passwordConfirm"
+                type="password"
+                autoComplete="new-password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2.5 text-sm outline-none transition focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
+                placeholder="パスワードを再入力"
               />
             </div>
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !!successMessage}
               className="w-full rounded-lg bg-[#1E3A5F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17304D] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isLoading ? "ログイン中..." : "ログイン"}
+              {isLoading ? "登録中..." : "新規登録"}
             </button>
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-600">
-            <Link href="/reset-password" className="text-blue-600 hover:underline">
-              パスワードを忘れた方はこちら
+            <Link href="/login" className="text-blue-600 hover:underline">
+              ログインページへ戻る
             </Link>
-            <p className="mt-2">
-              <Link href="/signup" className="text-blue-600 hover:underline">
-                アカウントをお持ちでない方はこちら
-              </Link>
-            </p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
