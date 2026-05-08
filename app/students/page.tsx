@@ -21,6 +21,7 @@ export default function StudentsPage() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -92,25 +93,65 @@ export default function StudentsPage() {
     }
 
     setIsSubmitting(true);
-    const { error } = await supabase.from("students").insert({
+    const studentPayload = {
       name: trimmedName,
       email: email.trim() || null,
       phone: phone.trim() || null,
       memo: memo.trim() || null
-    });
+    };
+
+    const { error } = editingStudentId
+      ? await supabase.from("students").update(studentPayload).eq("id", editingStudentId)
+      : await supabase.from("students").insert(studentPayload);
 
     if (error) {
-      setErrorMessage("生徒の追加に失敗しました。");
+      setErrorMessage(editingStudentId ? "生徒の更新に失敗しました。" : "生徒の追加に失敗しました。");
       setIsSubmitting(false);
       return;
     }
 
+    setEditingStudentId(null);
     setName("");
     setEmail("");
     setPhone("");
     setMemo("");
     await fetchStudents();
     setIsSubmitting(false);
+  };
+
+  const handleEdit = (student: Student) => {
+    setEditingStudentId(student.id);
+    setName(student.name);
+    setEmail(student.email ?? "");
+    setPhone(student.phone ?? "");
+    setMemo(student.memo ?? "");
+    setErrorMessage(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStudentId(null);
+    setName("");
+    setEmail("");
+    setPhone("");
+    setMemo("");
+    setErrorMessage(null);
+  };
+
+  const handleDelete = async (studentId: string) => {
+    const confirmed = window.confirm("この生徒を削除しますか？");
+    if (!confirmed) return;
+
+    setErrorMessage(null);
+    const { error } = await supabase.from("students").delete().eq("id", studentId);
+    if (error) {
+      setErrorMessage("生徒の削除に失敗しました。");
+      return;
+    }
+
+    if (editingStudentId === studentId) {
+      handleCancelEdit();
+    }
+    await fetchStudents();
   };
 
   const handleLogout = async () => {
@@ -144,7 +185,7 @@ export default function StudentsPage() {
       )}
 
       <section className="mt-6 rounded border border-gray-200 bg-white p-4">
-        <h2 className="text-lg font-medium">生徒を追加</h2>
+        <h2 className="text-lg font-medium">{editingStudentId ? "生徒を編集" : "生徒を追加"}</h2>
         <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
           <div>
             <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
@@ -202,14 +243,23 @@ export default function StudentsPage() {
             />
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
             <button
               type="submit"
               disabled={isSubmitting}
               className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? "追加中..." : "生徒を追加"}
+              {isSubmitting ? (editingStudentId ? "保存中..." : "追加中...") : editingStudentId ? "保存する" : "生徒を追加"}
             </button>
+            {editingStudentId && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                キャンセル
+              </button>
+            )}
           </div>
         </form>
       </section>
@@ -229,6 +279,7 @@ export default function StudentsPage() {
                   <th className="px-3 py-2 text-left font-medium text-gray-700">メール</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">電話番号</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">メモ</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
@@ -238,6 +289,24 @@ export default function StudentsPage() {
                     <td className="px-3 py-2">{student.email ?? "-"}</td>
                     <td className="px-3 py-2">{student.phone ?? "-"}</td>
                     <td className="px-3 py-2">{student.memo ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(student)}
+                          className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                        >
+                          編集
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(student.id)}
+                          className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

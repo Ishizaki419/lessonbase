@@ -43,6 +43,7 @@ export default function BookingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [students, setStudents] = useState<StudentOption[]>([]);
@@ -161,14 +162,17 @@ export default function BookingsPage() {
     };
 
     setIsSubmitting(true);
-    const { error } = await supabase.from("bookings").insert(newBooking);
+    const { error } = editingBookingId
+      ? await supabase.from("bookings").update(newBooking).eq("id", editingBookingId)
+      : await supabase.from("bookings").insert(newBooking);
 
     if (error) {
-      setErrorMessage("予約の追加に失敗しました。");
+      setErrorMessage(editingBookingId ? "予約の更新に失敗しました。" : "予約の追加に失敗しました。");
       setIsSubmitting(false);
       return;
     }
 
+    setEditingBookingId(null);
     setStudentId("");
     setBookingDate("");
     setStartTime("");
@@ -177,6 +181,45 @@ export default function BookingsPage() {
     setStatus("確定");
     await fetchBookings();
     setIsSubmitting(false);
+  };
+
+  const handleEdit = (booking: BookingRow) => {
+    setEditingBookingId(booking.id);
+    setStudentId(booking.student_id);
+    setBookingDate(booking.booking_date);
+    setStartTime(booking.start_time);
+    setEndTime(booking.end_time);
+    setMemo(booking.memo ?? "");
+    setStatus(booking.status);
+    setErrorMessage(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBookingId(null);
+    setStudentId("");
+    setBookingDate("");
+    setStartTime("");
+    setEndTime("");
+    setMemo("");
+    setStatus("確定");
+    setErrorMessage(null);
+  };
+
+  const handleDelete = async (bookingId: string) => {
+    const confirmed = window.confirm("この予約を削除しますか？");
+    if (!confirmed) return;
+
+    setErrorMessage(null);
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) {
+      setErrorMessage("予約の削除に失敗しました。");
+      return;
+    }
+
+    if (editingBookingId === bookingId) {
+      handleCancelEdit();
+    }
+    await fetchBookings();
   };
 
   const handleLogout = async () => {
@@ -210,7 +253,7 @@ export default function BookingsPage() {
       )}
 
       <section className="mt-6 rounded border border-gray-200 bg-white p-4">
-        <h2 className="text-lg font-medium">予約を追加</h2>
+        <h2 className="text-lg font-medium">{editingBookingId ? "予約を編集" : "予約を追加"}</h2>
         <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <label htmlFor="student" className="mb-1 block text-sm font-medium text-gray-700">
@@ -303,13 +346,24 @@ export default function BookingsPage() {
           </div>
 
           <div className="md:col-span-2">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "追加中..." : "予約を追加"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? (editingBookingId ? "保存中..." : "追加中...") : editingBookingId ? "保存する" : "予約を追加"}
+              </button>
+              {editingBookingId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </section>
@@ -336,6 +390,22 @@ export default function BookingsPage() {
                   {booking.booking_date} {booking.start_time} - {booking.end_time}
                 </p>
                 <p className="mt-1 text-sm text-gray-600">メモ: {booking.memo ?? "-"}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(booking)}
+                    className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    編集
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(booking.id)}
+                    className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    削除
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
