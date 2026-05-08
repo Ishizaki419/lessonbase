@@ -173,7 +173,7 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--background)]">
       <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <h1 className="text-2xl font-semibold">生徒一覧</h1>
@@ -273,18 +273,18 @@ export default function StudentsPage() {
         ) : (
           <div className="mt-3 overflow-x-auto rounded border border-gray-200">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-[#1E3A5F]">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">名前</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">メール</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">電話番号</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">メモ</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">操作</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">名前</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">メール</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">電話番号</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">メモ</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
                 {students.map((student) => (
-                  <tr key={student.id}>
+                  <tr key={student.id} className="hover:bg-gray-50">
                     <td className="px-3 py-2">{student.name}</td>
                     <td className="px-3 py-2">{student.email ?? "-"}</td>
                     <td className="px-3 py-2">{student.phone ?? "-"}</td>
@@ -294,14 +294,14 @@ export default function StudentsPage() {
                         <button
                           type="button"
                           onClick={() => handleEdit(student)}
-                          className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50"
                         >
                           編集
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(student.id)}
-                          className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          className="rounded border border-gray-300 px-2.5 py-1 text-xs text-red-600 hover:bg-gray-50"
                         >
                           削除
                         </button>

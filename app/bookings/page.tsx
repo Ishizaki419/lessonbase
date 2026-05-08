@@ -35,6 +35,12 @@ type BookingInsert = {
 
 const BOOKING_STATUSES = ["確定", "キャンセル", "完了"] as const;
 
+const STATUS_BADGE_CLASS: Record<(typeof BOOKING_STATUSES)[number], string> = {
+  確定: "bg-[#EAF3DE] text-[#3B6D11]",
+  完了: "bg-gray-100 text-gray-600",
+  キャンセル: "bg-[#FCEBEB] text-[#A32D2D]"
+};
+
 export default function BookingsPage() {
   const router = useRouter();
   const supabase = getSupabase();
@@ -241,7 +247,7 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--background)]">
       <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <h1 className="text-2xl font-semibold">予約一覧</h1>
@@ -375,40 +381,55 @@ export default function BookingsPage() {
         ) : bookings.length === 0 ? (
           <p className="mt-3 text-sm text-gray-600">予約データがありません。</p>
         ) : (
-          <ul className="mt-4 space-y-3">
-            {bookings.map((booking) => (
-              <li key={booking.id} className="rounded border border-gray-200 bg-white p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-base font-semibold">
-                    {booking.students?.name ?? "不明な生徒"}
-                  </span>
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                    {booking.status}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-gray-700">
-                  {booking.booking_date} {booking.start_time} - {booking.end_time}
-                </p>
-                <p className="mt-1 text-sm text-gray-600">メモ: {booking.memo ?? "-"}</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(booking)}
-                    className="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                  >
-                    編集
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(booking.id)}
-                    className="rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                  >
-                    削除
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-4 overflow-x-auto rounded border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-[#1E3A5F]">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-white">生徒名</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">日付</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">時間</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">ステータス</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">メモ</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {bookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">{booking.students?.name ?? "不明な生徒"}</td>
+                    <td className="px-3 py-2">{booking.booking_date}</td>
+                    <td className="px-3 py-2">
+                      {booking.start_time} - {booking.end_time}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASS[booking.status]}`}>
+                        {booking.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{booking.memo ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(booking)}
+                          className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                        >
+                          編集
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(booking.id)}
+                          className="rounded border border-gray-300 px-2.5 py-1 text-xs text-red-600 hover:bg-gray-50"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
       </main>

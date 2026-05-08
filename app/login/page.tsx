@@ -96,11 +96,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] px-4 py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
-        <div className="w-full rounded-2xl bg-white p-8 shadow-lg">
+    <div className="min-h-screen bg-[#F8FAFC] px-4">
+      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center">
+        <div className="w-full max-w-[320px] rounded-2xl bg-white p-8 shadow-xl">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl font-extrabold tracking-tight text-blue-700">LessonBase</h1>
+            <h1 className="text-[22px] font-bold text-[#1E3A5F]">LessonBase</h1>
             <p className="mt-2 text-sm text-gray-500">教室運営をシンプルに</p>
           </div>
 
@@ -121,7 +121,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2.5 text-sm outline-none transition focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
                 placeholder="example@example.com"
               />
             </div>
@@ -136,7 +136,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2.5 text-sm outline-none transition focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
                 placeholder="********"
               />
             </div>
@@ -144,7 +144,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-[#1E3A5F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17304D] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? "ログイン中..." : "ログイン"}
             </button>

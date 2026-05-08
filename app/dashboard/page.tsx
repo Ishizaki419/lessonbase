@@ -121,7 +121,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--background)]">
       <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -137,15 +137,15 @@ export default function DashboardPage() {
 
         <section className="mt-6 grid gap-4 md:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">登録生徒数</p>
+            <p className="text-sm font-medium text-gray-500">👨‍🎓 登録生徒数</p>
             <p className="mt-3 text-4xl font-bold text-gray-900">{studentCount}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">今日の予約件数</p>
+            <p className="text-sm font-medium text-gray-500">📅 今日の予約</p>
             <p className="mt-3 text-4xl font-bold text-blue-700">{todayBookingCount}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">今週の予約件数</p>
+            <p className="text-sm font-medium text-gray-500">🗓️ 今週の予約</p>
             <p className="mt-3 text-4xl font-bold text-indigo-700">{weekBookingCount}</p>
           </div>
         </section>
@@ -153,17 +153,17 @@ export default function DashboardPage() {
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <Link
             href="/students"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="rounded-xl bg-[#1E3A5F] p-6 text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#17304D] hover:shadow-md"
           >
-            <h2 className="text-xl font-semibold text-gray-900">生徒管理へ</h2>
-            <p className="mt-2 text-sm text-gray-600">生徒情報の登録・確認を行います。</p>
+            <h2 className="text-xl font-semibold">生徒管理へ →</h2>
+            <p className="mt-2 text-sm text-blue-100">生徒情報の登録・確認を行います。</p>
           </Link>
           <Link
             href="/bookings"
-            className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="rounded-xl bg-[#1E3A5F] p-6 text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#17304D] hover:shadow-md"
           >
-            <h2 className="text-xl font-semibold text-gray-900">予約管理へ</h2>
-            <p className="mt-2 text-sm text-gray-600">予約の追加・確認を行います。</p>
+            <h2 className="text-xl font-semibold">予約管理へ →</h2>
+            <p className="mt-2 text-sm text-blue-100">予約の追加・確認を行います。</p>
           </Link>
         </section>
       </main>
