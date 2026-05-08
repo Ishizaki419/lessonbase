@@ -22,6 +22,7 @@ export default function StudentsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -110,6 +111,7 @@ export default function StudentsPage() {
       return;
     }
 
+    setIsFormOpen(false);
     setEditingStudentId(null);
     setName("");
     setEmail("");
@@ -120,6 +122,7 @@ export default function StudentsPage() {
   };
 
   const handleEdit = (student: Student) => {
+    setIsFormOpen(true);
     setEditingStudentId(student.id);
     setName(student.name);
     setEmail(student.email ?? "");
@@ -129,6 +132,7 @@ export default function StudentsPage() {
   };
 
   const handleCancelEdit = () => {
+    setIsFormOpen(false);
     setEditingStudentId(null);
     setName("");
     setEmail("");
@@ -184,7 +188,27 @@ export default function StudentsPage() {
         </div>
       )}
 
-      <section className="mt-6 rounded border border-gray-200 bg-white p-4">
+      <section className="mt-6">
+        <button
+          type="button"
+          onClick={() => {
+            if (isFormOpen && editingStudentId) {
+              handleCancelEdit();
+              return;
+            }
+            setIsFormOpen((prev) => !prev);
+          }}
+          className="rounded bg-[#1E3A5F] px-4 py-2 text-sm font-semibold text-white hover:bg-[#17304D]"
+        >
+          {isFormOpen ? "フォームを閉じる" : "+ 生徒を追加"}
+        </button>
+      </section>
+
+      <section
+        className={`mt-4 overflow-hidden rounded border border-gray-200 bg-white transition-all duration-300 ${
+          isFormOpen ? "max-h-[900px] p-4 opacity-100" : "max-h-0 border-transparent p-0 opacity-0"
+        }`}
+      >
         <h2 className="text-lg font-medium">{editingStudentId ? "生徒を編集" : "生徒を追加"}</h2>
         <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
           <div>
@@ -251,15 +275,13 @@ export default function StudentsPage() {
             >
               {isSubmitting ? (editingStudentId ? "保存中..." : "追加中...") : editingStudentId ? "保存する" : "生徒を追加"}
             </button>
-            {editingStudentId && (
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                キャンセル
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              キャンセル
+            </button>
           </div>
         </form>
       </section>
