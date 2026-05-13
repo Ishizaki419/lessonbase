@@ -13,7 +13,8 @@ export function Header({ onLogout, isLoggingOut = false }: HeaderProps) {
   const navItems = [
     { href: "/dashboard", label: "ダッシュボード" },
     { href: "/students", label: "生徒管理" },
-    { href: "/bookings", label: "予約管理" }
+    { href: "/bookings", label: "予約管理" },
+    { href: "/settings", label: "設定" }
   ];
 
   return (

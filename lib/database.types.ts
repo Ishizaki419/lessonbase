@@ -1,3 +1,5 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
 export type Database = {
   public: {
     Tables: {
@@ -5,6 +7,7 @@ export type Database = {
         Row: {
           id: string;
           student_id: string;
+          school_id: string | null;
           booking_date: string;
           start_time: string;
           end_time: string;
@@ -15,6 +18,7 @@ export type Database = {
         Insert: {
           id?: string;
           student_id: string;
+          school_id: string;
           booking_date: string;
           start_time: string;
           end_time: string;
@@ -25,6 +29,7 @@ export type Database = {
         Update: {
           id?: string;
           student_id?: string;
+          school_id?: string | null;
           booking_date?: string;
           start_time?: string;
           end_time?: string;
@@ -39,12 +44,20 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "students";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bookings_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
           }
         ];
       };
       students: {
         Row: {
           id: string;
+          school_id: string | null;
           name: string;
           email: string | null;
           phone: string | null;
@@ -53,6 +66,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
+          school_id: string;
           name: string;
           email?: string | null;
           phone?: string | null;
@@ -61,17 +75,84 @@ export type Database = {
         };
         Update: {
           id?: string;
+          school_id?: string | null;
           name?: string;
           email?: string | null;
           phone?: string | null;
           memo?: string | null;
           created_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "students_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      schools: {
+        Row: {
+          id: string;
+          name: string;
+          owner_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          owner_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          owner_id?: string | null;
+          created_at?: string;
+        };
         Relationships: [];
+      };
+      school_members: {
+        Row: {
+          id: string;
+          school_id: string;
+          user_id: string;
+          role: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id: string;
+          user_id: string;
+          role?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string;
+          user_id?: string;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "school_members_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          }
+        ];
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      invite_school_member: {
+        Args: { p_school_id: string; p_email: string };
+        Returns: Json;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { getSupabase } from "@/lib/supabase";
+import { useClientSupabase } from "@/lib/hooks/useClientSupabase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = useClientSupabase();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,6 +23,10 @@ export default function LoginPage() {
   }, [email]);
 
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -41,7 +45,7 @@ export default function LoginPage() {
       cancelled = true;
       authListenerData.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, supabase]);
 
   const validate = () => {
     setValidationError(null);
@@ -73,6 +77,9 @@ export default function LoginPage() {
     e.preventDefault();
 
     if (!validate()) return;
+    if (!supabase) {
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -143,7 +150,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !supabase}
               className="w-full rounded-lg bg-[#1E3A5F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17304D] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? "ログイン中..." : "ログイン"}

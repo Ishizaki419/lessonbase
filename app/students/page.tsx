@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getSupabase } from "@/lib/supabase";
 import { Header } from "@/components/Header";
+import { useClientSupabase } from "@/lib/hooks/useClientSupabase";
+import { useSchool } from "@/lib/hooks/useSchool";
 
 type Student = {
   id: string;
@@ -16,7 +18,9 @@ type Student = {
 
 export default function StudentsPage() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = useClientSupabase();
+  const { schoolId, loading: schoolLoading } = useSchool();
+
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,26 +36,37 @@ export default function StudentsPage() {
   const [phone, setPhone] = useState("");
   const [memo, setMemo] = useState("");
 
-  const fetchStudents = async () => {
-    setIsLoadingList(true);
-    setErrorMessage(null);
+  const fetchStudents = useCallback(
+    async (sid: string) => {
+      if (!supabase) {
+        return;
+      }
+      setIsLoadingList(true);
+      setErrorMessage(null);
 
-    const { data, error } = await supabase
-      .from("students")
-      .select("id, name, email, phone, memo, created_at")
-      .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, name, email, phone, memo, created_at")
+        .eq("school_id", sid)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      setErrorMessage("生徒一覧の取得に失敗しました。");
+      if (error) {
+        setErrorMessage("生徒一覧の取得に失敗しました。");
+        setIsLoadingList(false);
+        return;
+      }
+
+      setStudents((data ?? []) as Student[]);
       setIsLoadingList(false);
+    },
+    [supabase]
+  );
+
+  useEffect(() => {
+    if (!supabase) {
       return;
     }
 
-    setStudents((data ?? []) as Student[]);
-    setIsLoadingList(false);
-  };
-
-  useEffect(() => {
     let mounted = true;
 
     const checkSession = async () => {
@@ -64,32 +79,46 @@ export default function StudentsPage() {
       }
 
       setIsCheckingAuth(false);
-      await fetchStudents();
     };
 
-    checkSession();
+    void checkSession();
 
-    const { data: authListenerData } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!session) {
-          router.replace("/login");
-        }
+    const { data: authListenerData } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace("/login");
       }
-    );
+    });
 
     return () => {
       mounted = false;
       authListenerData.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, supabase]);
+
+  useEffect(() => {
+    if (!supabase || isCheckingAuth || schoolLoading) return;
+    if (!schoolId) {
+      setStudents([]);
+      setIsLoadingList(false);
+      return;
+    }
+    void fetchStudents(schoolId);
+  }, [supabase, isCheckingAuth, schoolLoading, schoolId, fetchStudents]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    if (!supabase) {
+      return;
+    }
 
     const trimmedName = name.trim();
     if (!trimmedName) {
       setErrorMessage("名前は必須です。");
+      return;
+    }
+    if (!schoolId) {
+      setErrorMessage("教室が未設定です。「設定」から教室を作成してください。");
       return;
     }
 
@@ -103,7 +132,7 @@ export default function StudentsPage() {
 
     const { error } = editingStudentId
       ? await supabase.from("students").update(studentPayload).eq("id", editingStudentId)
-      : await supabase.from("students").insert(studentPayload);
+      : await supabase.from("students").insert({ ...studentPayload, school_id: schoolId });
 
     if (error) {
       setErrorMessage(editingStudentId ? "生徒の更新に失敗しました。" : "生徒の追加に失敗しました。");
@@ -117,7 +146,7 @@ export default function StudentsPage() {
     setEmail("");
     setPhone("");
     setMemo("");
-    await fetchStudents();
+    await fetchStudents(schoolId);
     setIsSubmitting(false);
   };
 
@@ -144,6 +173,9 @@ export default function StudentsPage() {
   const handleDelete = async (studentId: string) => {
     const confirmed = window.confirm("この生徒を削除しますか？");
     if (!confirmed) return;
+    if (!supabase) {
+      return;
+    }
 
     setErrorMessage(null);
     const { error } = await supabase.from("students").delete().eq("id", studentId);
@@ -155,10 +187,15 @@ export default function StudentsPage() {
     if (editingStudentId === studentId) {
       handleCancelEdit();
     }
-    await fetchStudents();
+    if (schoolId) {
+      await fetchStudents(schoolId);
+    }
   };
 
   const handleLogout = async () => {
+    if (!supabase) {
+      return;
+    }
     setIsLoggingOut(true);
     try {
       await supabase.auth.signOut();
@@ -168,10 +205,10 @@ export default function StudentsPage() {
     }
   };
 
-  if (isCheckingAuth) {
+  if (!supabase || isCheckingAuth || schoolLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-gray-600">認証確認中...</p>
+        <p className="text-sm text-gray-600">読み込み中...</p>
       </div>
     );
   }
@@ -185,6 +222,16 @@ export default function StudentsPage() {
       {errorMessage && (
         <div className="mt-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
+        </div>
+      )}
+
+      {!schoolId && (
+        <div className="mt-4 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          教室に所属していません。{" "}
+          <Link href="/settings" className="font-medium text-blue-700 underline">
+            設定
+          </Link>
+          から教室を作成してください。
         </div>
       )}
 

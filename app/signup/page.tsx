@@ -4,15 +4,16 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { getSupabase } from "@/lib/supabase";
+import { useClientSupabase } from "@/lib/hooks/useClientSupabase";
 
 export default function SignupPage() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = useClientSupabase();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [schoolName, setSchoolName] = useState("");
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -24,6 +25,10 @@ export default function SignupPage() {
   }, [email]);
 
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -35,7 +40,7 @@ export default function SignupPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, supabase]);
 
   const validate = () => {
     setValidationError(null);
@@ -62,22 +67,68 @@ export default function SignupPage() {
       setValidationError("パスワード確認が一致しません。");
       return false;
     }
+    if (!schoolName.trim()) {
+      setValidationError("教室名を入力してください。");
+      return false;
+    }
     return true;
   };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    if (!supabase) {
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password
       });
 
       if (error) {
         setAuthError(error.message);
+        return;
+      }
+
+      const session = data.session;
+      if (!session?.user) {
+        setSuccessMessage(
+          "登録が完了しました。メール内の確認後にログインし、「設定」から教室を作成してください。"
+        );
+        setTimeout(() => {
+          router.replace("/login");
+        }, 2000);
+        return;
+      }
+
+      const userId = session.user.id;
+      const { data: schoolRow, error: schoolError } = await supabase
+        .from("schools")
+        .insert({ name: schoolName.trim(), owner_id: userId })
+        .select("id")
+        .single();
+
+      if (schoolError || !schoolRow) {
+        setAuthError(
+          "アカウントは作成できましたが、教室の作成に失敗しました。ログイン後に「設定」から教室を作成してください。"
+        );
+        return;
+      }
+
+      const { error: memberError } = await supabase.from("school_members").insert({
+        school_id: schoolRow.id,
+        user_id: userId,
+        role: "owner"
+      });
+
+      if (memberError) {
+        await supabase.from("schools").delete().eq("id", schoolRow.id);
+        setAuthError(
+          "アカウントは作成できましたが、教室メンバーの登録に失敗しました。ログイン後に「設定」から教室を作成してください。"
+        );
         return;
       }
 
@@ -143,6 +194,21 @@ export default function SignupPage() {
             </div>
 
             <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="schoolName">
+                教室名（必須）
+              </label>
+              <input
+                id="schoolName"
+                type="text"
+                autoComplete="organization"
+                value={schoolName}
+                onChange={(e) => setSchoolName(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2.5 text-sm outline-none transition focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
+                placeholder="○○教室"
+              />
+            </div>
+
+            <div>
               <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="passwordConfirm">
                 パスワード確認
               </label>
@@ -159,7 +225,7 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              disabled={isLoading || !!successMessage}
+              disabled={isLoading || !!successMessage || !supabase}
               className="w-full rounded-lg bg-[#1E3A5F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17304D] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? "登録中..." : "新規登録"}

@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getSupabase } from "@/lib/supabase";
 import { Header } from "@/components/Header";
+import { useClientSupabase } from "@/lib/hooks/useClientSupabase";
+import { useSchool } from "@/lib/hooks/useSchool";
 
 type StudentOption = {
   id: string;
@@ -25,15 +27,6 @@ type BookingRow = {
   };
 };
 
-type BookingInsert = {
-  student_id: string;
-  booking_date: string;
-  start_time: string;
-  end_time: string;
-  memo: string | null;
-  status: "確定" | "キャンセル" | "完了";
-};
-
 const BOOKING_STATUSES = ["確定", "キャンセル", "完了"] as const;
 
 const STATUS_BADGE_CLASS: Record<(typeof BOOKING_STATUSES)[number], string> = {
@@ -44,7 +37,8 @@ const STATUS_BADGE_CLASS: Record<(typeof BOOKING_STATUSES)[number], string> = {
 
 export default function BookingsPage() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = useClientSupabase();
+  const { schoolId, loading: schoolLoading } = useSchool();
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,23 +57,37 @@ export default function BookingsPage() {
   const [memo, setMemo] = useState("");
   const [status, setStatus] = useState<(typeof BOOKING_STATUSES)[number]>("確定");
 
-  const fetchStudents = async () => {
-    const { data, error } = await supabase.from("students").select("id, name, email").order("name");
-    if (error) {
-      setErrorMessage("生徒一覧の取得に失敗しました。");
-      return;
-    }
-    setStudents((data ?? []) as StudentOption[]);
-  };
+  const fetchStudents = useCallback(
+    async (sid: string) => {
+      if (!supabase) {
+        return;
+      }
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, name, email")
+        .eq("school_id", sid)
+        .order("name");
+      if (error) {
+        setErrorMessage("生徒一覧の取得に失敗しました。");
+        return;
+      }
+      setStudents((data ?? []) as StudentOption[]);
+    },
+    [supabase]
+  );
 
-  const fetchBookings = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
+  const fetchBookings = useCallback(
+    async (sid: string) => {
+      if (!supabase) {
+        return;
+      }
+      setIsLoading(true);
+      setErrorMessage(null);
 
-    const { data, error } = await supabase
-      .from("bookings")
-      .select(
-        `
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(
+          `
         id,
         student_id,
         booking_date,
@@ -92,21 +100,28 @@ export default function BookingsPage() {
           name
         )
       `
-      )
-      .order("booking_date", { ascending: true })
-      .order("start_time", { ascending: true });
+        )
+        .eq("school_id", sid)
+        .order("booking_date", { ascending: true })
+        .order("start_time", { ascending: true });
 
-    if (error) {
-      setErrorMessage("予約一覧の取得に失敗しました。");
+      if (error) {
+        setErrorMessage("予約一覧の取得に失敗しました。");
+        setIsLoading(false);
+        return;
+      }
+
+      setBookings((data ?? []) as BookingRow[]);
       setIsLoading(false);
+    },
+    [supabase]
+  );
+
+  useEffect(() => {
+    if (!supabase) {
       return;
     }
 
-    setBookings((data ?? []) as BookingRow[]);
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
     let mounted = true;
 
     const checkSession = async () => {
@@ -119,28 +134,39 @@ export default function BookingsPage() {
       }
 
       setIsCheckingAuth(false);
-      await Promise.all([fetchStudents(), fetchBookings()]);
     };
 
-    checkSession();
+    void checkSession();
 
-    const { data: authListenerData } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!session) {
-          router.replace("/login");
-        }
+    const { data: authListenerData } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace("/login");
       }
-    );
+    });
 
     return () => {
       mounted = false;
       authListenerData.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, supabase]);
+
+  useEffect(() => {
+    if (!supabase || isCheckingAuth || schoolLoading) return;
+    if (!schoolId) {
+      setStudents([]);
+      setBookings([]);
+      setIsLoading(false);
+      return;
+    }
+    void Promise.all([fetchStudents(schoolId), fetchBookings(schoolId)]);
+  }, [supabase, isCheckingAuth, schoolLoading, schoolId, fetchStudents, fetchBookings]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    if (!supabase) {
+      return;
+    }
 
     if (!studentId) {
       setErrorMessage("生徒名を選択してください。");
@@ -159,7 +185,12 @@ export default function BookingsPage() {
       return;
     }
 
-    const newBooking: BookingInsert = {
+    if (!schoolId) {
+      setErrorMessage("教室が未設定です。「設定」から教室を作成してください。");
+      return;
+    }
+
+    const basePayload = {
       student_id: studentId,
       booking_date: bookingDate,
       start_time: startTime,
@@ -168,10 +199,13 @@ export default function BookingsPage() {
       status
     };
 
+    const isNewBooking = !editingBookingId;
+    const studentIdForEmail = studentId;
+
     setIsSubmitting(true);
     const { error } = editingBookingId
-      ? await supabase.from("bookings").update(newBooking).eq("id", editingBookingId)
-      : await supabase.from("bookings").insert(newBooking);
+      ? await supabase.from("bookings").update(basePayload).eq("id", editingBookingId)
+      : await supabase.from("bookings").insert({ ...basePayload, school_id: schoolId });
 
     if (error) {
       setErrorMessage(editingBookingId ? "予約の更新に失敗しました。" : "予約の追加に失敗しました。");
@@ -187,8 +221,8 @@ export default function BookingsPage() {
     setMemo("");
     setStatus("確定");
 
-    if (!editingBookingId) {
-      const selectedStudent = students.find((student) => student.id === studentId);
+    if (isNewBooking) {
+      const selectedStudent = students.find((student) => student.id === studentIdForEmail);
       if (selectedStudent?.email) {
         try {
           await fetch("/api/send-email", {
@@ -209,7 +243,9 @@ export default function BookingsPage() {
       }
     }
 
-    await fetchBookings();
+    if (schoolId) {
+      await fetchBookings(schoolId);
+    }
     setIsSubmitting(false);
   };
 
@@ -238,6 +274,9 @@ export default function BookingsPage() {
   const handleDelete = async (bookingId: string) => {
     const confirmed = window.confirm("この予約を削除しますか？");
     if (!confirmed) return;
+    if (!supabase) {
+      return;
+    }
 
     setErrorMessage(null);
     const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
@@ -249,10 +288,15 @@ export default function BookingsPage() {
     if (editingBookingId === bookingId) {
       handleCancelEdit();
     }
-    await fetchBookings();
+    if (schoolId) {
+      await fetchBookings(schoolId);
+    }
   };
 
   const handleLogout = async () => {
+    if (!supabase) {
+      return;
+    }
     setIsLoggingOut(true);
     try {
       await supabase.auth.signOut();
@@ -262,10 +306,10 @@ export default function BookingsPage() {
     }
   };
 
-  if (isCheckingAuth) {
+  if (!supabase || isCheckingAuth || schoolLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-gray-600">認証確認中...</p>
+        <p className="text-sm text-gray-600">読み込み中...</p>
       </div>
     );
   }
@@ -279,6 +323,16 @@ export default function BookingsPage() {
       {errorMessage && (
         <div className="mt-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
+        </div>
+      )}
+
+      {!schoolId && (
+        <div className="mt-4 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          教室に所属していません。{" "}
+          <Link href="/settings" className="font-medium text-blue-700 underline">
+            設定
+          </Link>
+          から教室を作成してください。
         </div>
       )}
 
