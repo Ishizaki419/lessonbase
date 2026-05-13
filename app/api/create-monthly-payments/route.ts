@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       student_id: setting.student_id,
       amount: setting.amount,
       currency: "jpy",
-      status: "unpaid",
+      status: "pending",
       description: setting.description?.trim() || defaultDescription,
       due_date: dueDate
     });

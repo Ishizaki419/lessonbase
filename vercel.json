@@ -3,6 +3,10 @@
     {
       "path": "/api/create-monthly-payments",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/charge-monthly",
+      "schedule": "0 0 * * *"
     }
   ]
 }

@@ -295,7 +295,7 @@ export default function PaymentsPage() {
         student_id: studentId,
         amount: parsedAmount,
         currency,
-        status: "unpaid",
+        status: "pending",
         description: trimmedDescription || null,
         due_date: dueDate || null
       })

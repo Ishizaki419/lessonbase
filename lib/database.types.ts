@@ -62,6 +62,7 @@ export type Database = {
           email: string | null;
           phone: string | null;
           memo: string | null;
+          stripe_customer_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -71,6 +72,7 @@ export type Database = {
           email?: string | null;
           phone?: string | null;
           memo?: string | null;
+          stripe_customer_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -80,6 +82,7 @@ export type Database = {
           email?: string | null;
           phone?: string | null;
           memo?: string | null;
+          stripe_customer_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -97,18 +100,21 @@ export type Database = {
           id: string;
           name: string;
           owner_id: string | null;
+          billing_day: number;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           owner_id?: string | null;
+          billing_day?: number;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
           owner_id?: string | null;
+          billing_day?: number;
           created_at?: string;
         };
         Relationships: [];
@@ -157,6 +163,7 @@ export type Database = {
           description: string | null;
           due_date: string | null;
           paid_at: string | null;
+          charged_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -170,6 +177,7 @@ export type Database = {
           description?: string | null;
           due_date?: string | null;
           paid_at?: string | null;
+          charged_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -183,6 +191,7 @@ export type Database = {
           description?: string | null;
           due_date?: string | null;
           paid_at?: string | null;
+          charged_at?: string | null;
           created_at?: string;
         };
         Relationships: [

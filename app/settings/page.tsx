@@ -34,8 +34,10 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isSavingBillingDay, setIsSavingBillingDay] = useState(false);
   const [isCreatingSchool, setIsCreatingSchool] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [billingDayInput, setBillingDayInput] = useState("25");
 
   const loadMembers = useCallback(
     async (sid: string) => {
@@ -103,6 +105,14 @@ export default function SettingsPage() {
       return;
     }
     void loadMembers(schoolId);
+
+    const loadBillingDay = async () => {
+      const { data, error } = await supabase.from("schools").select("billing_day").eq("id", schoolId).maybeSingle();
+      if (!error && data?.billing_day) {
+        setBillingDayInput(String(data.billing_day));
+      }
+    };
+    void loadBillingDay();
   }, [schoolId, loadMembers, supabase]);
 
   const handleLogout = async () => {
@@ -139,6 +149,32 @@ export default function SettingsPage() {
     }
     setInfoMessage("教室名を更新しました。");
     await refreshSchool();
+  };
+
+  const handleSaveBillingDay = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!supabase) {
+      return;
+    }
+    if (!context?.isOwner) return;
+
+    const parsed = Number.parseInt(billingDayInput, 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 28) {
+      setErrorMessage("引き落とし日は1〜28日の範囲で指定してください。");
+      return;
+    }
+
+    setIsSavingBillingDay(true);
+    setErrorMessage(null);
+    const { error } = await supabase.from("schools").update({ billing_day: parsed }).eq("id", context.schoolId);
+    setIsSavingBillingDay(false);
+
+    if (error) {
+      setErrorMessage("引き落とし日の更新に失敗しました。");
+      return;
+    }
+
+    setInfoMessage("引き落とし日を更新しました。");
   };
 
   const handleCreateSchool = async (e: FormEvent) => {
@@ -263,7 +299,7 @@ export default function SettingsPage() {
       <Header onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <main className="mx-auto max-w-5xl p-6">
         <h1 className="text-2xl font-semibold text-gray-900">設定</h1>
-        <p className="mt-1 text-sm text-gray-600">教室の名前変更・メンバー管理を行います。</p>
+        <p className="mt-1 text-sm text-gray-600">教室の名前変更・引き落とし日・メンバー管理を行います。</p>
 
         {errorMessage && (
           <div className="mt-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>
@@ -315,6 +351,40 @@ export default function SettingsPage() {
                 </form>
               ) : (
                 <p className="mt-2 text-sm text-gray-700">{context.schoolName}</p>
+              )}
+            </section>
+
+            <section className="mt-8 rounded border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-medium text-gray-900">引き落とし日</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                毎月この日の午前9時（日本時間）に、未払いの請求を生徒ごとにまとめて自動引き落としします。
+              </p>
+              {context.isOwner ? (
+                <form onSubmit={handleSaveBillingDay} className="mt-4 flex max-w-md flex-col gap-3">
+                  <div>
+                    <label htmlFor="billingDay" className="mb-1 block text-sm font-medium text-gray-700">
+                      引き落とし日（1〜28日）
+                    </label>
+                    <input
+                      id="billingDay"
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={billingDayInput}
+                      onChange={(e) => setBillingDayInput(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-[#F8FAFC] px-3 py-2 text-sm outline-none focus:border-[#1E3A5F] focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSavingBillingDay}
+                    className="w-fit rounded-lg bg-[#1E3A5F] px-4 py-2 text-sm font-semibold text-white hover:bg-[#17304D] disabled:opacity-60"
+                  >
+                    {isSavingBillingDay ? "保存中..." : "保存する"}
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-2 text-sm text-gray-700">毎月{billingDayInput}日</p>
               )}
             </section>
 
