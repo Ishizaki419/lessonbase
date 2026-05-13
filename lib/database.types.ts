@@ -145,6 +145,63 @@ export type Database = {
           }
         ];
       };
+      payments: {
+        Row: {
+          id: string;
+          school_id: string | null;
+          student_id: string | null;
+          amount: number;
+          currency: string;
+          status: string;
+          stripe_payment_intent_id: string | null;
+          description: string | null;
+          due_date: string | null;
+          paid_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id?: string | null;
+          student_id?: string | null;
+          amount: number;
+          currency?: string;
+          status?: string;
+          stripe_payment_intent_id?: string | null;
+          description?: string | null;
+          due_date?: string | null;
+          paid_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string | null;
+          student_id?: string | null;
+          amount?: number;
+          currency?: string;
+          status?: string;
+          stripe_payment_intent_id?: string | null;
+          description?: string | null;
+          due_date?: string | null;
+          paid_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payments_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payments_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
