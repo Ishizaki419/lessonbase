@@ -202,6 +202,57 @@ export type Database = {
           }
         ];
       };
+      payment_settings: {
+        Row: {
+          id: string;
+          school_id: string | null;
+          student_id: string | null;
+          billing_type: string;
+          amount: number;
+          billing_day: number;
+          description: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id?: string | null;
+          student_id?: string | null;
+          billing_type?: string;
+          amount: number;
+          billing_day?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string | null;
+          student_id?: string | null;
+          billing_type?: string;
+          amount?: number;
+          billing_day?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payment_settings_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payment_settings_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {

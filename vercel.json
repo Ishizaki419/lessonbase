@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/create-monthly-payments",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
