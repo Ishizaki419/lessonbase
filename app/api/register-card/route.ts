@@ -1,35 +1,27 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-import type { Database } from "@/lib/database.types";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 type RegisterCardBody = {
   student_id?: string;
 };
 
-function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    return null;
-  }
-  return createClient<Database>(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
-
-async function verifyStudentAccess(admin: ReturnType<typeof createClient<Database>>, token: string, studentId: string) {
+async function verifyStudentAccess(
+  supabase: NonNullable<ReturnType<typeof createSupabaseRouteClient>>,
+  token: string,
+  studentId: string
+) {
   const {
     data: { user },
     error: userError
-  } = await admin.auth.getUser(token);
+  } = await supabase.auth.getUser(token);
 
   if (userError || !user) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const { data: student, error: studentError } = await admin
+  const { data: student, error: studentError } = await supabase
     .from("students")
     .select("id, name, email, school_id, stripe_customer_id")
     .eq("id", studentId)
@@ -39,7 +31,7 @@ async function verifyStudentAccess(admin: ReturnType<typeof createClient<Databas
     return { error: NextResponse.json({ error: "Student not found" }, { status: 404 }) };
   }
 
-  const { data: member } = await admin
+  const { data: member } = await supabase
     .from("school_members")
     .select("id")
     .eq("user_id", user.id)
@@ -77,12 +69,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "student_id is required" }, { status: 400 });
   }
 
-  const admin = getAdminClient();
-  if (!admin) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  const supabase = createSupabaseRouteClient(token);
+  if (!supabase) {
+    return NextResponse.json(
+      {
+        error:
+          "Supabase の環境変数が不足しています。NEXT_PUBLIC_SUPABASE_URL と NEXT_PUBLIC_SUPABASE_ANON_KEY を設定してください。"
+      },
+      { status: 500 }
+    );
   }
 
-  const access = await verifyStudentAccess(admin, token, studentId);
+  const access = await verifyStudentAccess(supabase, token, studentId);
   if ("error" in access && access.error) {
     return access.error;
   }
@@ -104,7 +102,7 @@ export async function POST(req: Request) {
       });
       customerId = customer.id;
 
-      const { error: updateError } = await admin
+      const { error: updateError } = await supabase
         .from("students")
         .update({ stripe_customer_id: customerId })
         .eq("id", student.id);
