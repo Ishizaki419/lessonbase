@@ -8,7 +8,9 @@ import type { Database } from "@/lib/database.types";
 import {
   checkSupabaseAdminEnv,
   createSupabaseAdminClient,
-  supabaseAdminEnvErrorPayload
+  probeSchoolsTable,
+  supabaseAdminEnvErrorPayload,
+  type SchoolsTableProbe
 } from "@/lib/supabaseAdmin";
 
 /** デプロイ済みコードの判別用（GET /api/charge-monthly で確認可能） */
@@ -70,6 +72,11 @@ type ChargeDebugInfo = {
   dryRun: boolean;
   schoolsMatched: { id: string; name: string; billing_day: number | null }[];
   allSchoolsBillingDays?: { id: string; name: string; billing_day: number | null }[];
+  supabaseAdmin?: {
+    keyRole: string;
+    supabaseUrlHost: string | null;
+  };
+  schoolsTableProbe?: SchoolsTableProbe;
   billableStudents: {
     id: string;
     school_id: string;
@@ -186,15 +193,25 @@ export async function GET() {
   const missing = collectEnvMissing();
   const jst = getJstParts();
 
+  const { client: admin } = createSupabaseAdminClient();
+  const schoolsTableProbe = admin ? await probeSchoolsTable(admin) : null;
+
   return routeJson(200, {
-    ok: missing.length === 0,
+    ok: missing.length === 0 && supabaseEnv.keyRole === "service_role",
     message:
       missing.length === 0
-        ? "環境変数は揃っています。POST で Cron 実行してください。"
+        ? supabaseEnv.keyRole === "service_role"
+          ? "環境変数は揃っています。POST で Cron 実行してください。"
+          : "SUPABASE_SERVICE_ROLE_KEY が anon キーです。service_role に差し替えてください。"
         : "不足している環境変数があります。",
     missing,
     jst,
     billingDayFilterToday: jst.day,
+    supabaseAdmin: {
+      keyRole: supabaseEnv.keyRole,
+      supabaseUrlHost: supabaseEnv.supabaseUrlHost
+    },
+    schoolsTableProbe,
     details: {
       CRON_SECRET_set: !!process.env.CRON_SECRET?.trim(),
       STRIPE_SECRET_KEY_set: !!process.env.STRIPE_SECRET_KEY?.trim(),
@@ -232,6 +249,19 @@ export async function POST(req: Request) {
     return routeJson(500, payload);
   }
 
+  if (supabaseEnv.keyRole === "anon") {
+    return routeJson(500, {
+      error: "SUPABASE_SERVICE_ROLE_KEY に anon キーが設定されています。service_role キーに差し替えてください。",
+      stage: "env_wrong_supabase_key",
+      details: {
+        keyRole: supabaseEnv.keyRole,
+        supabaseUrlHost: supabaseEnv.supabaseUrlHost
+      }
+    });
+  }
+
+  const schoolsTableProbe = await probeSchoolsTable(admin);
+
   const stripe = stripeKey ? new Stripe(stripeKey, { typescript: true }) : null;
   const jst = getJstParts();
   const { year, month, day } = jst;
@@ -243,6 +273,12 @@ export async function POST(req: Request) {
     billingDayFilter: day,
     dryRun,
     schoolsMatched: [],
+    allSchoolsBillingDays: schoolsTableProbe.selectIdNameBillingDay.rows,
+    supabaseAdmin: {
+      keyRole: schoolsTableProbe.keyRole,
+      supabaseUrlHost: schoolsTableProbe.supabaseUrlHost
+    },
+    schoolsTableProbe,
     billableStudents: [],
     pendingPaymentsFetched: 0,
     studentGroups: []
@@ -268,12 +304,14 @@ export async function POST(req: Request) {
     }));
 
     if (!schools?.length) {
-      const { data: allSchools } = await admin.from("schools").select("id, name, billing_day");
-      debug.allSchoolsBillingDays = (allSchools ?? []).map((s) => ({
-        id: s.id,
-        name: s.name,
-        billing_day: s.billing_day
-      }));
+      debug.allSchoolsBillingDays = schoolsTableProbe.selectIdNameBillingDay.rows;
+
+      const probeHint =
+        schoolsTableProbe.selectStar.rowCount === 0
+          ? "schools テーブルに行がありません（別プロジェクトの URL / キーの可能性）"
+          : schoolsTableProbe.selectIdNameBillingDay.error
+            ? `billing_day 列の取得に失敗: ${schoolsTableProbe.selectIdNameBillingDay.error.message}（マイグレーション未適用の可能性）`
+            : "settings の引き落とし日と schools.billing_day が一致しているか確認してください";
 
       return routeJson(200, {
         ok: true,
@@ -282,7 +320,7 @@ export async function POST(req: Request) {
         failedStudents: 0,
         skipped: 0,
         message: `本日(JST ${jst.dateString})の引き落とし日(billing_day=${day})に一致する教室がありません`,
-        hint: "settings の引き落とし日と schools.billing_day が一致しているか確認してください",
+        hint: probeHint,
         debug,
         studentResults
       });
