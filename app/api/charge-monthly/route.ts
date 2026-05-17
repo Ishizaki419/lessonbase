@@ -47,17 +47,60 @@ type StudentRow = {
   name: string;
   email: string | null;
   stripe_customer_id: string;
+  school_id: string;
 };
 
-function getJstParts(date = new Date()): JstParts {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
+type StudentChargeResult = {
+  studentId: string;
+  studentName: string;
+  stripeCustomerId: string;
+  schoolId: string;
+  paymentIds: string[];
+  totalAmount: number;
+  outcome: "charged" | "failed" | "skipped";
+  reason?: string;
+  stripeStatus?: string;
+  paymentIntentId?: string;
+};
+
+type ChargeDebugInfo = {
+  serverTimeUtc: string;
+  jst: JstParts & { dateString: string };
+  billingDayFilter: number;
+  dryRun: boolean;
+  schoolsMatched: { id: string; name: string; billing_day: number | null }[];
+  allSchoolsBillingDays?: { id: string; name: string; billing_day: number | null }[];
+  billableStudents: {
+    id: string;
+    school_id: string;
+    stripe_customer_id: string;
+    name: string;
+  }[];
+  pendingPaymentsFetched: number;
+  studentGroups: { studentId: string; paymentCount: number; totalAmount: number; schoolIds: string[] }[];
+  orphanPendingPayments?: {
+    id: string;
+    school_id: string | null;
+    student_id: string | null;
+    status: string | null;
+    amount: number;
+  }[];
+};
+
+function getJstParts(date = new Date()): JstParts & { dateString: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  });
-  const [year, month, day] = formatter.format(date).split("-").map(Number);
-  return { year, month, day };
+  }).formatToParts(date);
+
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+  const dateString = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  return { year, month, day, dateString };
 }
 
 function formatYen(amount: number) {
@@ -141,6 +184,7 @@ function verifyCronAuth(req: Request): NextResponse | null {
 export async function GET() {
   const supabaseEnv = checkSupabaseAdminEnv();
   const missing = collectEnvMissing();
+  const jst = getJstParts();
 
   return routeJson(200, {
     ok: missing.length === 0,
@@ -149,12 +193,15 @@ export async function GET() {
         ? "環境変数は揃っています。POST で Cron 実行してください。"
         : "不足している環境変数があります。",
     missing,
+    jst,
+    billingDayFilterToday: jst.day,
     details: {
       CRON_SECRET_set: !!process.env.CRON_SECRET?.trim(),
       STRIPE_SECRET_KEY_set: !!process.env.STRIPE_SECRET_KEY?.trim(),
       ...supabaseEnv.present
     },
-    postHint: "curl -X POST /api/charge-monthly -H \"Authorization: Bearer $CRON_SECRET\""
+    postHint:
+      'curl -X POST "/api/charge-monthly?dryRun=1" -H "Authorization: Bearer $CRON_SECRET" でDB照合のみ実行可能'
   });
 }
 
@@ -164,8 +211,11 @@ export async function POST(req: Request) {
     return authError;
   }
 
+  const url = new URL(req.url);
+  const dryRun = url.searchParams.get("dryRun") === "1" || url.searchParams.get("dryRun") === "true";
+
   const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!stripeKey) {
+  if (!stripeKey && !dryRun) {
     console.error("[charge-monthly]", "env", "STRIPE_SECRET_KEY is not set");
     return routeJson(500, {
       error: "STRIPE_SECRET_KEY is not set",
@@ -182,8 +232,23 @@ export async function POST(req: Request) {
     return routeJson(500, payload);
   }
 
-  const stripe = new Stripe(stripeKey, { typescript: true });
-  const { year, month, day } = getJstParts();
+  const stripe = stripeKey ? new Stripe(stripeKey, { typescript: true }) : null;
+  const jst = getJstParts();
+  const { year, month, day } = jst;
+  const serverTimeUtc = new Date().toISOString();
+
+  const debug: ChargeDebugInfo = {
+    serverTimeUtc,
+    jst,
+    billingDayFilter: day,
+    dryRun,
+    schoolsMatched: [],
+    billableStudents: [],
+    pendingPaymentsFetched: 0,
+    studentGroups: []
+  };
+
+  const studentResults: StudentChargeResult[] = [];
 
   try {
     const { data: schools, error: schoolsError } = await admin
@@ -193,16 +258,33 @@ export async function POST(req: Request) {
 
     if (schoolsError) {
       console.error("[charge-monthly]", "fetch_schools", schoolsError.message);
-      return NextResponse.json({ error: schoolsError.message, stage: "fetch_schools" }, { status: 500 });
+      return routeJson(500, { error: schoolsError.message, stage: "fetch_schools", debug });
     }
 
+    debug.schoolsMatched = (schools ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      billing_day: s.billing_day
+    }));
+
     if (!schools?.length) {
-      return NextResponse.json({
+      const { data: allSchools } = await admin.from("schools").select("id, name, billing_day");
+      debug.allSchoolsBillingDays = (allSchools ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        billing_day: s.billing_day
+      }));
+
+      return routeJson(200, {
         ok: true,
         billingDay: day,
         chargedStudents: 0,
         failedStudents: 0,
-        skipped: 0
+        skipped: 0,
+        message: `本日(JST ${jst.dateString})の引き落とし日(billing_day=${day})に一致する教室がありません`,
+        hint: "settings の引き落とし日と schools.billing_day が一致しているか確認してください",
+        debug,
+        studentResults
       });
     }
 
@@ -212,26 +294,36 @@ export async function POST(req: Request) {
       .from("students")
       .select("id, name, email, stripe_customer_id, school_id")
       .in("school_id", schoolIds)
-      .not("stripe_customer_id", "is", null);
+      .not("stripe_customer_id", "is", null)
+      .neq("stripe_customer_id", "");
 
     if (studentsError) {
       console.error("[charge-monthly]", "fetch_students", studentsError.message);
-      return NextResponse.json({ error: studentsError.message, stage: "fetch_students" }, { status: 500 });
+      return routeJson(500, { error: studentsError.message, stage: "fetch_students", debug });
     }
 
-    const billableStudents = (studentsWithCard ?? []).filter(
-      (s): s is StudentRow & { school_id: string } =>
-        !!s.stripe_customer_id && !!s.school_id
-    );
+    const billableStudents = (studentsWithCard ?? []).filter((s): s is StudentRow => {
+      const cid = s.stripe_customer_id?.trim();
+      return !!cid && !!s.school_id;
+    });
+
+    debug.billableStudents = billableStudents.map((s) => ({
+      id: s.id,
+      school_id: s.school_id,
+      stripe_customer_id: s.stripe_customer_id,
+      name: s.name
+    }));
 
     if (billableStudents.length === 0) {
-      return NextResponse.json({
+      return routeJson(200, {
         ok: true,
         billingDay: day,
         chargedStudents: 0,
         failedStudents: 0,
         skipped: 0,
-        message: "No students with registered cards"
+        message: "カード登録済みの生徒がいません（stripe_customer_id が空の行は除外）",
+        debug,
+        studentResults
       });
     }
 
@@ -240,22 +332,55 @@ export async function POST(req: Request) {
 
     const { data: payments, error: paymentsError } = await admin
       .from("payments")
-      .select("id, school_id, student_id, amount, description, currency")
+      .select("id, school_id, student_id, amount, description, currency, status")
       .in("school_id", schoolIds)
       .in("student_id", billableStudentIds)
       .in("status", ["pending", "unpaid"]);
 
     if (paymentsError) {
       console.error("[charge-monthly]", "fetch_payments", paymentsError.message);
-      return NextResponse.json({ error: paymentsError.message, stage: "fetch_payments" }, { status: 500 });
+      return routeJson(500, { error: paymentsError.message, stage: "fetch_payments", debug });
     }
 
+    const paymentRows = (payments ?? []) as (PaymentRow & { status?: string })[];
+    debug.pendingPaymentsFetched = paymentRows.length;
+
     const byStudent = new Map<string, PaymentRow[]>();
-    for (const payment of (payments ?? []) as PaymentRow[]) {
+    for (const payment of paymentRows) {
       if (!payment.student_id) continue;
       const list = byStudent.get(payment.student_id) ?? [];
       list.push(payment);
       byStudent.set(payment.student_id, list);
+    }
+
+    debug.studentGroups = [...byStudent.entries()].map(([studentId, rows]) => ({
+      studentId,
+      paymentCount: rows.length,
+      totalAmount: rows.reduce((sum, p) => sum + p.amount, 0),
+      schoolIds: [...new Set(rows.map((p) => p.school_id).filter(Boolean))] as string[]
+    }));
+
+    if (byStudent.size === 0) {
+      const { data: orphanPending } = await admin
+        .from("payments")
+        .select("id, school_id, student_id, status, amount")
+        .in("school_id", schoolIds)
+        .in("status", ["pending", "unpaid"]);
+
+      return routeJson(200, {
+        ok: true,
+        billingDay: day,
+        chargedStudents: 0,
+        failedStudents: 0,
+        skipped: 0,
+        message:
+          "未払い請求はありますが、カード登録済み生徒との紐付けがありません（payments.student_id が未設定、または別教室の生徒IDの可能性）",
+        debug: {
+          ...debug,
+          orphanPendingPayments: orphanPending ?? []
+        },
+        studentResults
+      });
     }
 
     let chargedStudents = 0;
@@ -267,17 +392,67 @@ export async function POST(req: Request) {
       const studentRow = studentById.get(studentId);
       if (!studentRow) {
         skipped++;
+        studentResults.push({
+          studentId,
+          studentName: "?",
+          stripeCustomerId: "",
+          schoolId: studentPayments[0]?.school_id ?? "",
+          paymentIds: studentPayments.map((p) => p.id),
+          totalAmount: studentPayments.reduce((sum, p) => sum + p.amount, 0),
+          outcome: "skipped",
+          reason: "billableStudents に含まれない student_id"
+        });
         continue;
       }
 
       const totalAmount = studentPayments.reduce((sum, p) => sum + p.amount, 0);
       if (totalAmount <= 0) {
         skipped++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds: studentPayments.map((p) => p.id),
+          totalAmount,
+          outcome: "skipped",
+          reason: "合計金額が0以下"
+        });
         continue;
       }
 
       const paymentIds = studentPayments.map((p) => p.id);
       const idempotencyKey = buildIdempotencyKey(studentId, paymentIds);
+
+      if (dryRun) {
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "skipped",
+          reason: "dryRun=true のため Stripe 課金はスキップ"
+        });
+        skipped++;
+        continue;
+      }
+
+      if (!stripe) {
+        failedStudents++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "failed",
+          reason: "Stripe クライアント未初期化"
+        });
+        continue;
+      }
 
       let paymentMethodId: string | null = null;
       try {
@@ -286,6 +461,16 @@ export async function POST(req: Request) {
           console.error("[charge-monthly]", "stripe_customer", "Customer deleted", { studentId });
           await markPaymentsFailed(admin, paymentIds);
           failedStudents++;
+          studentResults.push({
+            studentId,
+            studentName: studentRow.name,
+            stripeCustomerId: studentRow.stripe_customer_id,
+            schoolId: studentRow.school_id,
+            paymentIds,
+            totalAmount,
+            outcome: "failed",
+            reason: "Stripe Customer が削除済み"
+          });
           continue;
         }
 
@@ -307,6 +492,16 @@ export async function POST(req: Request) {
         console.error("[charge-monthly]", "stripe_customer", message, { studentId });
         await markPaymentsFailed(admin, paymentIds);
         failedStudents++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "failed",
+          reason: `Stripe Customer 取得失敗: ${message}`
+        });
         continue;
       }
 
@@ -314,6 +509,16 @@ export async function POST(req: Request) {
         console.error("[charge-monthly]", "payment_method", "No default card", { studentId });
         await markPaymentsFailed(admin, paymentIds);
         failedStudents++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "failed",
+          reason: "登録済みカード（default_payment_method）がありません"
+        });
         continue;
       }
 
@@ -343,6 +548,18 @@ export async function POST(req: Request) {
           });
           await markPaymentsFailed(admin, paymentIds);
           failedStudents++;
+          studentResults.push({
+            studentId,
+            studentName: studentRow.name,
+            stripeCustomerId: studentRow.stripe_customer_id,
+            schoolId: studentRow.school_id,
+            paymentIds,
+            totalAmount,
+            outcome: "failed",
+            reason: `PaymentIntent 未成功: ${paymentIntent.status}`,
+            stripeStatus: paymentIntent.status,
+            paymentIntentId: paymentIntent.id
+          });
           continue;
         }
 
@@ -358,16 +575,15 @@ export async function POST(req: Request) {
 
         if (updateError) {
           console.error("[charge-monthly]", "supabase_paid", updateError.message, { paymentIds });
-          return NextResponse.json(
-            {
-              error: updateError.message,
-              stage: "supabase_paid",
-              warning: "Stripe charge succeeded but DB update failed; reconcile manually",
-              paymentIntentId: paymentIntent.id,
-              paymentIds
-            },
-            { status: 500 }
-          );
+          return routeJson(500, {
+            error: updateError.message,
+            stage: "supabase_paid",
+            warning: "Stripe charge succeeded but DB update failed; reconcile manually",
+            paymentIntentId: paymentIntent.id,
+            paymentIds,
+            debug,
+            studentResults
+          });
         }
 
         if (studentRow.email) {
@@ -392,6 +608,17 @@ export async function POST(req: Request) {
         }
 
         chargedStudents++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "charged",
+          stripeStatus: paymentIntent.status,
+          paymentIntentId: paymentIntent.id
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stripeAny = err as { type?: string; code?: string; decline_code?: string };
@@ -404,10 +631,21 @@ export async function POST(req: Request) {
         });
         await markPaymentsFailed(admin, paymentIds);
         failedStudents++;
+        studentResults.push({
+          studentId,
+          studentName: studentRow.name,
+          stripeCustomerId: studentRow.stripe_customer_id,
+          schoolId: studentRow.school_id,
+          paymentIds,
+          totalAmount,
+          outcome: "failed",
+          reason: `Stripe 課金失敗: ${message}`,
+          stripeStatus: stripeAny.code
+        });
       }
     }
 
-    return NextResponse.json({
+    return routeJson(200, {
       ok: true,
       billingDay: day,
       year,
@@ -416,11 +654,13 @@ export async function POST(req: Request) {
       studentsWithCard: billableStudents.length,
       chargedStudents,
       failedStudents,
-      skipped
+      skipped,
+      debug,
+      studentResults
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[charge-monthly]", "unexpected", message, err);
-    return NextResponse.json({ error: message, stage: "unexpected" }, { status: 500 });
+    return routeJson(500, { error: message, stage: "unexpected", debug });
   }
 }
