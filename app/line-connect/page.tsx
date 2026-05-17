@@ -202,8 +202,35 @@ export default function LineConnectPage() {
 
 function InnerConnect() {
   const searchParams = useSearchParams();
-  const studentId = searchParams.get("studentId") ?? "";
-  const schoolId = searchParams.get("schoolId") ?? "";
+  // LIFFはURLを書き換えることがあるため、複数の方法でパラメータを取得する
+  const getParam = (key: string): string => {
+    // 1. Next.js searchParams
+    const fromNext = searchParams.get(key);
+    if (fromNext) return fromNext;
+
+    if (typeof window === "undefined") return "";
+
+    // 2. window.location.search
+    const fromWindow = new URLSearchParams(window.location.search).get(key);
+    if (fromWindow) return fromWindow;
+
+    // 3. LIFF が liff.state にエンコードしたパラメータ
+    const liffState = new URLSearchParams(window.location.search).get("liff.state");
+    if (liffState) {
+      try {
+        const decoded = decodeURIComponent(liffState);
+        const stateParams = new URLSearchParams(decoded.startsWith("?") ? decoded.slice(1) : decoded);
+        const fromState = stateParams.get(key);
+        if (fromState) return fromState;
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    return "";
+  };
+  const studentId = getParam("studentId");
+  const schoolId = getParam("schoolId");
   const [status, setStatus] = useState<Status>("loading");
   const [message, setMessage] = useState("");
 
