@@ -48,7 +48,9 @@ export async function POST(req: Request) {
   const { client: admin, env: supabaseEnv } = createSupabaseAdminClient();
   if (!admin) {
     console.error("[create-monthly-payments]", "env", supabaseAdminEnvErrorPayload(supabaseEnv));
-    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv), { status: 500 });
+    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv, "create-monthly-payments"), {
+      status: 500
+    });
   }
 
   const { year, month, day } = getJstParts();

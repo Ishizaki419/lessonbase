@@ -6,9 +6,26 @@ import Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
+  checkSupabaseAdminEnv,
   createSupabaseAdminClient,
   supabaseAdminEnvErrorPayload
 } from "@/lib/supabaseAdmin";
+
+/** デプロイ済みコードの判別用（GET /api/charge-monthly で確認可能） */
+const ROUTE_ID = "charge-monthly";
+const API_VERSION = 2;
+
+function routeJson(status: number, body: Record<string, unknown>) {
+  return NextResponse.json({ route: ROUTE_ID, apiVersion: API_VERSION, ...body }, { status });
+}
+
+function collectEnvMissing(): string[] {
+  const missing: string[] = [];
+  if (!process.env.CRON_SECRET?.trim()) missing.push("CRON_SECRET");
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) missing.push("STRIPE_SECRET_KEY");
+  missing.push(...checkSupabaseAdminEnv().missing);
+  return [...new Set(missing)];
+}
 
 type JstParts = {
   year: number;
@@ -99,16 +116,46 @@ function verifyCronAuth(req: Request): NextResponse | null {
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret) {
     console.error("[charge-monthly]", "cron_auth", "CRON_SECRET is not set");
-    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
+    return routeJson(500, {
+      error: "CRON_SECRET is not configured",
+      stage: "env_cron",
+      missing: ["CRON_SECRET"],
+      details: { CRON_SECRET_set: false }
+    });
   }
 
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${cronSecret}`) {
     console.error("[charge-monthly]", "cron_auth", "Unauthorized cron request");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return routeJson(401, {
+      error: "Unauthorized",
+      stage: "cron_auth",
+      hint: "Authorization: Bearer <CRON_SECRET> ヘッダーが必要です"
+    });
   }
 
   return null;
+}
+
+/** デプロイ確認・環境変数チェック（認証不要） */
+export async function GET() {
+  const supabaseEnv = checkSupabaseAdminEnv();
+  const missing = collectEnvMissing();
+
+  return routeJson(200, {
+    ok: missing.length === 0,
+    message:
+      missing.length === 0
+        ? "環境変数は揃っています。POST で Cron 実行してください。"
+        : "不足している環境変数があります。",
+    missing,
+    details: {
+      CRON_SECRET_set: !!process.env.CRON_SECRET?.trim(),
+      STRIPE_SECRET_KEY_set: !!process.env.STRIPE_SECRET_KEY?.trim(),
+      ...supabaseEnv.present
+    },
+    postHint: "curl -X POST /api/charge-monthly -H \"Authorization: Bearer $CRON_SECRET\""
+  });
 }
 
 export async function POST(req: Request) {
@@ -120,20 +167,19 @@ export async function POST(req: Request) {
   const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
   if (!stripeKey) {
     console.error("[charge-monthly]", "env", "STRIPE_SECRET_KEY is not set");
-    return NextResponse.json(
-      {
-        error: "STRIPE_SECRET_KEY is not set",
-        stage: "env_stripe",
-        details: { STRIPE_SECRET_KEY_set: false }
-      },
-      { status: 500 }
-    );
+    return routeJson(500, {
+      error: "STRIPE_SECRET_KEY is not set",
+      stage: "env_stripe",
+      missing: ["STRIPE_SECRET_KEY"],
+      details: { STRIPE_SECRET_KEY_set: false }
+    });
   }
 
   const { client: admin, env: supabaseEnv } = createSupabaseAdminClient();
   if (!admin) {
-    console.error("[charge-monthly]", "env", supabaseAdminEnvErrorPayload(supabaseEnv));
-    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv), { status: 500 });
+    const payload = supabaseAdminEnvErrorPayload(supabaseEnv, ROUTE_ID);
+    console.error("[charge-monthly]", "env", payload);
+    return routeJson(500, payload);
   }
 
   const stripe = new Stripe(stripeKey, { typescript: true });

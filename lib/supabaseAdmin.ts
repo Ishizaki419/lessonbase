@@ -49,8 +49,9 @@ export function createSupabaseAdminClient() {
   return { client, env };
 }
 
-export function supabaseAdminEnvErrorPayload(env: SupabaseAdminEnvCheck) {
+export function supabaseAdminEnvErrorPayload(env: SupabaseAdminEnvCheck, route?: string) {
   return {
+    route: route ?? "unknown",
     error:
       "Supabase のサーバー用キーが不足しています。Vercel の環境変数に SUPABASE_SERVICE_ROLE_KEY を追加してください（Cron はユーザーの JWT がないため必須です）。",
     stage: "env_supabase_admin",

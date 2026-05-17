@@ -1,7 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-import type { Database } from "@/lib/database.types";
+import {
+  createSupabaseAdminClient,
+  supabaseAdminEnvErrorPayload
+} from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   const authHeader = req.headers.get("authorization");
@@ -10,10 +12,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  const { client: admin, env: supabaseEnv } = createSupabaseAdminClient();
+  if (!admin) {
+    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv, "schools/bootstrap"), {
+      status: 500
+    });
   }
 
   let body: { schoolName?: string };
@@ -27,10 +30,6 @@ export async function POST(req: Request) {
   if (!schoolName) {
     return NextResponse.json({ error: "schoolName is required" }, { status: 400 });
   }
-
-  const admin = createClient<Database>(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
 
   const {
     data: { user },
