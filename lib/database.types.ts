@@ -63,6 +63,7 @@ export type Database = {
           phone: string | null;
           memo: string | null;
           stripe_customer_id: string | null;
+          line_user_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -73,6 +74,7 @@ export type Database = {
           phone?: string | null;
           memo?: string | null;
           stripe_customer_id?: string | null;
+          line_user_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -83,6 +85,7 @@ export type Database = {
           phone?: string | null;
           memo?: string | null;
           stripe_customer_id?: string | null;
+          line_user_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -101,6 +104,7 @@ export type Database = {
           name: string;
           owner_id: string | null;
           billing_day: number;
+          owner_line_user_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -108,6 +112,7 @@ export type Database = {
           name: string;
           owner_id?: string | null;
           billing_day?: number;
+          owner_line_user_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -115,6 +120,7 @@ export type Database = {
           name?: string;
           owner_id?: string | null;
           billing_day?: number;
+          owner_line_user_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
