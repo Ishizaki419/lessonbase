@@ -14,6 +14,7 @@ type Student = {
   phone: string | null;
   memo: string | null;
   stripe_customer_id: string | null;
+  line_user_id: string | null;
   created_at: string;
 };
 
@@ -47,7 +48,7 @@ export default function StudentsPage() {
 
       const { data, error } = await supabase
         .from("students")
-        .select("id, name, email, phone, memo, stripe_customer_id, created_at")
+        .select("id, name, email, phone, memo, stripe_customer_id, line_user_id, created_at")
         .eq("school_id", sid)
         .order("created_at", { ascending: false });
 
@@ -350,6 +351,7 @@ export default function StudentsPage() {
                   <th className="px-3 py-2 text-left font-medium text-white">電話番号</th>
                   <th className="px-3 py-2 text-left font-medium text-white">メモ</th>
                   <th className="px-3 py-2 text-left font-medium text-white">カード</th>
+                  <th className="px-3 py-2 text-left font-medium text-white">LINE</th>
                   <th className="px-3 py-2 text-left font-medium text-white">操作</th>
                 </tr>
               </thead>
@@ -372,6 +374,17 @@ export default function StudentsPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          student.line_user_id
+                            ? "bg-[#E6F9ED] text-[#06C755]"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {student.line_user_id ? "連携済み" : "未連携"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/students/${student.id}/register-card`}
@@ -379,6 +392,14 @@ export default function StudentsPage() {
                         >
                           カードを登録
                         </Link>
+                        {!student.line_user_id && (
+                          <Link
+                            href={`/students/${student.id}/line-connect`}
+                            className="rounded border border-[#06C755] px-2.5 py-1 text-xs text-[#06C755] hover:bg-green-50"
+                          >
+                            LINE連携
+                          </Link>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleEdit(student)}

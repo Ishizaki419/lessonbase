@@ -1,7 +1,11 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import Stripe from "stripe";
+import {
+  sendLinePush,
+  buildChargeCompleteMessage,
+  buildChargeSummaryMessage
+} from "@/lib/line";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -50,6 +54,7 @@ type StudentRow = {
   email: string | null;
   stripe_customer_id: string;
   school_id: string;
+  line_user_id: string | null;
 };
 
 type StudentChargeResult = {
@@ -129,37 +134,18 @@ async function markPaymentsFailed(admin: SupabaseClient<Database>, paymentIds: s
   }
 }
 
-async function sendChargeEmail(
-  to: string,
-  studentName: string,
+async function notifyChargeComplete(
+  student: StudentRow,
   totalAmount: number,
-  items: { description: string; amount: number }[]
+  items: { description: string; amount: number }[],
+  schoolName: string
 ) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    return;
+  if (!student.line_user_id) return;
+  const msg = buildChargeCompleteMessage(student.name, totalAmount, items, schoolName);
+  const result = await sendLinePush(student.line_user_id, [msg]);
+  if (!result.ok) {
+    console.error("[charge-monthly]", "line_push_student", result.error, { studentId: student.id });
   }
-
-  const resend = new Resend(apiKey);
-  const lines = items
-    .map((item) => `<li>${item.description || "請求"} — ${formatYen(item.amount)}</li>`)
-    .join("");
-
-  await resend.emails.send({
-    from: "onboarding@resend.dev",
-    to,
-    subject: `【LessonBase】${formatYen(totalAmount)}の引き落としが完了しました`,
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <p>${studentName} 様</p>
-        <p>LessonBaseより、引き落とし完了のお知らせです。</p>
-        <p><strong>合計金額: ${formatYen(totalAmount)}</strong></p>
-        <h3>請求明細</h3>
-        <ul>${lines}</ul>
-        <p>ご不明な点があれば教室までお問い合わせください。</p>
-      </div>
-    `
-  });
 }
 
 function verifyCronAuth(req: Request): NextResponse | null {
@@ -330,7 +316,7 @@ export async function POST(req: Request) {
 
     const { data: studentsWithCard, error: studentsError } = await admin
       .from("students")
-      .select("id, name, email, stripe_customer_id, school_id")
+      .select("id, name, email, stripe_customer_id, school_id, line_user_id")
       .in("school_id", schoolIds)
       .not("stripe_customer_id", "is", null)
       .neq("stripe_customer_id", "");
@@ -624,26 +610,14 @@ export async function POST(req: Request) {
           });
         }
 
-        if (studentRow.email) {
-          try {
-            await sendChargeEmail(
-              studentRow.email,
-              studentRow.name,
-              totalAmount,
-              studentPayments.map((p) => ({
-                description: p.description ?? "請求",
-                amount: p.amount
-              }))
-            );
-          } catch (emailErr) {
-            console.error(
-              "[charge-monthly]",
-              "send_email",
-              emailErr instanceof Error ? emailErr.message : emailErr,
-              { studentId }
-            );
-          }
-        }
+        const schoolName =
+          schools.find((s) => s.id === studentRow.school_id)?.name ?? "教室";
+        await notifyChargeComplete(
+          studentRow,
+          totalAmount,
+          studentPayments.map((p) => ({ description: p.description ?? "月謝", amount: p.amount })),
+          schoolName
+        );
 
         chargedStudents++;
         studentResults.push({
@@ -680,6 +654,39 @@ export async function POST(req: Request) {
           reason: `Stripe 課金失敗: ${message}`,
           stripeStatus: stripeAny.code
         });
+      }
+    }
+
+    // 教室オーナーへサマリー通知
+    if (!dryRun && chargedStudents + failedStudents > 0) {
+      const { data: schoolsWithOwnerLine } = await admin
+        .from("schools")
+        .select("id, name, owner_line_user_id")
+        .in("id", schoolIds);
+
+      for (const school of schoolsWithOwnerLine ?? []) {
+        if (!school.owner_line_user_id) continue;
+        const schoolCharged = studentResults.filter(
+          (r) => r.schoolId === school.id && r.outcome === "charged"
+        );
+        const schoolFailed = studentResults.filter(
+          (r) => r.schoolId === school.id && r.outcome === "failed"
+        );
+        const schoolTotal = schoolCharged.reduce((sum, r) => sum + r.totalAmount, 0);
+        const msg = buildChargeSummaryMessage(
+          school.name,
+          year,
+          month,
+          schoolCharged.length,
+          schoolFailed.length,
+          schoolTotal
+        );
+        const result = await sendLinePush(school.owner_line_user_id, [msg]);
+        if (!result.ok) {
+          console.error("[charge-monthly]", "line_push_owner", result.error, {
+            schoolId: school.id
+          });
+        }
       }
     }
 

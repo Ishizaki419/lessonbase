@@ -1,42 +1,57 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
+import { sendLinePush, buildBookingConfirmMessage } from "@/lib/line";
+import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "RESEND_API_KEY is not set" }, { status: 500 });
-    }
+    const { studentId, studentName, bookingDate, startTime, endTime, schoolName } =
+      (await req.json()) as {
+        studentId?: string;
+        studentName: string;
+        bookingDate: string;
+        startTime: string;
+        endTime: string;
+        schoolName?: string;
+      };
 
-    const { to, studentName, bookingDate, startTime, endTime, status } = await req.json();
-
-    if (!to || !studentName || !bookingDate || !startTime || !endTime || !status) {
+    if (!studentName || !bookingDate || !startTime || !endTime) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const resend = new Resend(apiKey);
+    const displaySchoolName = schoolName ?? "教室";
+    const msg = buildBookingConfirmMessage(
+      studentName,
+      bookingDate,
+      startTime,
+      endTime,
+      displaySchoolName
+    );
 
-    const { error } = await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to,
-      subject: "【LessonBase】予約が確定しました",
-      html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>予約内容のお知らせ</h2>
-          <p>生徒名: ${studentName}</p>
-          <p>レッスン日付: ${bookingDate}</p>
-          <p>時間: ${startTime} 〜 ${endTime}</p>
-          <p>ステータス: ${status}</p>
-        </div>
-      `
-    });
+    // LINE user ID を取得して通知
+    if (studentId) {
+      const { client: admin } = createSupabaseAdminClient();
+      if (admin) {
+        const { data } = await admin
+          .from("students")
+          .select("line_user_id")
+          .eq("id", studentId)
+          .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+        if (data?.line_user_id) {
+          const result = await sendLinePush(data.line_user_id, [msg]);
+          if (!result.ok) {
+            console.error("[send-notification]", "line_push", result.error, { studentId });
+            return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+          }
+          return NextResponse.json({ ok: true, channel: "line" });
+        }
+      }
     }
 
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    // LINE未連携の場合はスキップ（将来的にメール等を追加可能）
+    return NextResponse.json({ ok: true, channel: "none", reason: "LINE not connected" });
+  } catch (err) {
+    console.error("[send-notification]", err);
+    return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
   }
 }
