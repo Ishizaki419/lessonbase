@@ -1,10 +1,14 @@
 import { createHash } from "crypto";
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import Stripe from "stripe";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import {
+  createSupabaseAdminClient,
+  supabaseAdminEnvErrorPayload
+} from "@/lib/supabaseAdmin";
 
 type JstParts = {
   year: number;
@@ -50,10 +54,7 @@ function buildIdempotencyKey(studentId: string, paymentIds: string[]) {
   return `charge-${studentId}-${hash}`;
 }
 
-async function markPaymentsFailed(
-  admin: ReturnType<typeof createClient<Database>>,
-  paymentIds: string[]
-) {
+async function markPaymentsFailed(admin: SupabaseClient<Database>, paymentIds: string[]) {
   if (paymentIds.length === 0) return;
   const { error } = await admin.from("payments").update({ status: "failed" }).in("id", paymentIds);
   if (error) {
@@ -117,16 +118,23 @@ export async function POST(req: Request) {
   }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!stripeKey || !url || !serviceKey) {
-    console.error("[charge-monthly]", "env", "Missing STRIPE_SECRET_KEY, Supabase URL, or SERVICE_ROLE_KEY");
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  if (!stripeKey) {
+    console.error("[charge-monthly]", "env", "STRIPE_SECRET_KEY is not set");
+    return NextResponse.json(
+      {
+        error: "STRIPE_SECRET_KEY is not set",
+        stage: "env_stripe",
+        details: { STRIPE_SECRET_KEY_set: false }
+      },
+      { status: 500 }
+    );
   }
 
-  const admin = createClient<Database>(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
+  const { client: admin, env: supabaseEnv } = createSupabaseAdminClient();
+  if (!admin) {
+    console.error("[charge-monthly]", "env", supabaseAdminEnvErrorPayload(supabaseEnv));
+    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv), { status: 500 });
+  }
 
   const stripe = new Stripe(stripeKey, { typescript: true });
   const { year, month, day } = getJstParts();

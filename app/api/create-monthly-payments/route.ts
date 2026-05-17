@@ -1,7 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-import type { Database } from "@/lib/database.types";
+import {
+  createSupabaseAdminClient,
+  supabaseAdminEnvErrorPayload
+} from "@/lib/supabaseAdmin";
 
 type JstParts = {
   year: number;
@@ -31,23 +33,23 @@ function jstMonthRange(year: number, month: number) {
 }
 
 export async function POST(req: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret) {
+    console.error("[create-monthly-payments]", "cron_auth", "CRON_SECRET is not set");
+    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    console.error("[create-monthly-payments]", "cron_auth", "Unauthorized cron request");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createClient<Database>(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
+  const { client: admin, env: supabaseEnv } = createSupabaseAdminClient();
+  if (!admin) {
+    console.error("[create-monthly-payments]", "env", supabaseAdminEnvErrorPayload(supabaseEnv));
+    return NextResponse.json(supabaseAdminEnvErrorPayload(supabaseEnv), { status: 500 });
+  }
 
   const { year, month, day } = getJstParts();
   const { start: monthStart, end: monthEnd, dueDate } = jstMonthRange(year, month);
