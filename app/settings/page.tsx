@@ -10,8 +10,14 @@ import { useSchool } from "@/lib/hooks/useSchool";
 
 declare global {
   interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    liff: any;
+    liff: {
+      init: (opts: { liffId: string }) => Promise<void>;
+      isLoggedIn: () => boolean;
+      login: () => void;
+      getProfile: () => Promise<{ userId: string; displayName: string }>;
+      getIDToken: () => string | null;
+      closeWindow: () => void;
+    };
   }
 }
 
