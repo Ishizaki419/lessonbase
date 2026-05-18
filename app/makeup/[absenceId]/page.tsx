@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Script from "next/script";
 import type { AvailableSlot } from "@/app/api/availability/slots/route";
@@ -11,7 +11,6 @@ declare global {
       init: (opts: { liffId: string }) => Promise<void>;
       isLoggedIn: () => boolean;
       login: () => void;
-      getProfile: () => Promise<{ userId: string; displayName: string }>;
       closeWindow: () => void;
     };
   }
@@ -29,76 +28,87 @@ function groupByDate(slots: AvailableSlot[]): Record<string, AvailableSlot[]> {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  const dow = DAYS_JP[d.getDay()];
-  return `${dateStr}（${dow}）`;
+  return `${dateStr}（${DAYS_JP[d.getDay()]}）`;
 }
+
+type Step = "loading" | "select" | "confirm" | "done" | "error";
 
 function MakeupInner() {
   const params = useParams<{ absenceId: string }>();
   const absenceId = params.absenceId;
 
-  const [liffReady, setLiffReady] = useState(false);
-  const [step, setStep] = useState<"loading" | "select" | "confirm" | "done" | "error">("loading");
+  const [step, setStep] = useState<Step>("loading");
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
-  const [schoolId, setSchoolId] = useState<string | null>(null);
   const [selected, setSelected] = useState<AvailableSlot | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const initialized = useRef(false);
 
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID ?? "";
 
-  const initLiff = async () => {
-    if (!liffId) { setStep("error"); setErrorMsg("LIFF IDが設定されていません"); return; }
-    try {
-      await window.liff.init({ liffId });
-      if (!window.liff.isLoggedIn()) { window.liff.login(); return; }
-      await loadAbsenceAndSlots();
-    } catch (err) {
-      console.error(err);
-      setStep("error");
-      setErrorMsg("LINE初期化に失敗しました");
-    }
-  };
-
-  const loadAbsenceAndSlots = async () => {
-    if (!absenceId) { setStep("error"); setErrorMsg("欠席IDが指定されていません"); return; }
-
-    let sid: string | null = null;
-
-    // schoolId は URL パラメータから取得（振替URLに含める）
-    if (typeof window !== "undefined") {
-      const u = new URLSearchParams(window.location.search);
-      sid = u.get("schoolId") ?? u.get("school_id");
-      if (!sid) {
-        const state = u.get("liff.state");
-        if (state) {
-          const decoded = decodeURIComponent(state);
-          const stateU = new URLSearchParams(decoded.startsWith("?") ? decoded.slice(1) : decoded);
-          sid = stateU.get("schoolId");
-        }
+  const getSchoolId = (): string | null => {
+    if (typeof window === "undefined") return null;
+    const u = new URLSearchParams(window.location.search);
+    let sid = u.get("schoolId");
+    if (sid) return sid;
+    const state = u.get("liff.state");
+    if (state) {
+      const decoded = decodeURIComponent(state);
+      const path = decoded.startsWith("/") ? decoded : "/" + decoded;
+      const qmark = path.indexOf("?");
+      if (qmark >= 0) {
+        sid = new URLSearchParams(path.slice(qmark + 1)).get("schoolId");
       }
     }
-    setSchoolId(sid);
+    return sid;
+  };
 
-    if (!sid) {
+  const init = async () => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    if (liffId) {
+      try {
+        await window.liff.init({ liffId });
+        if (!window.liff.isLoggedIn()) {
+          window.liff.login();
+          return;
+        }
+      } catch (err) {
+        console.warn("LIFF init warning:", err);
+        // LIFF失敗でも続行（URLパラメータのみで動作）
+      }
+    }
+
+    await loadSlots();
+  };
+
+  const loadSlots = async () => {
+    const schoolId = getSchoolId();
+
+    if (!schoolId) {
       setStep("error");
-      setErrorMsg("教室情報が取得できませんでした。先生に振替URLを再発行してもらってください。");
+      setErrorMsg("URLが正しくありません。先生から受け取ったリンクを開いてください。");
+      return;
+    }
+    if (!absenceId) {
+      setStep("error");
+      setErrorMsg("欠席IDが取得できませんでした。");
       return;
     }
 
-    const slotsRes = await fetch(`/api/availability/slots?schoolId=${sid}&days=30`);
-    const slotsJson = (await slotsRes.json()) as { ok: boolean; slots: AvailableSlot[] };
-    if (!slotsJson.ok) {
-      setStep("error"); setErrorMsg("空き枠の取得に失敗しました"); return;
+    const res = await fetch(`/api/availability/slots?schoolId=${schoolId}&days=30`);
+    const json = (await res.json()) as { ok: boolean; slots: AvailableSlot[] };
+
+    if (!json.ok) {
+      setStep("error");
+      setErrorMsg("空き枠の取得に失敗しました。");
+      return;
     }
-    setSlots(slotsJson.slots);
+
+    setSlots(json.slots);
     setStep("select");
   };
-
-  useEffect(() => {
-    if (liffReady) void initLiff();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liffReady]);
 
   const handleBook = async () => {
     if (!selected || !absenceId) return;
@@ -128,7 +138,10 @@ function MakeupInner() {
   if (step === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" onReady={() => setLiffReady(true)} />
+        <Script
+          src="https://static.line-scdn.net/liff/edge/2/sdk.js"
+          onReady={() => { void init(); }}
+        />
         <p className="text-sm text-gray-500">読み込み中...</p>
       </div>
     );
@@ -139,8 +152,9 @@ function MakeupInner() {
       <div className="flex min-h-screen items-center justify-center bg-white p-6">
         <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" />
         <div className="max-w-sm text-center">
-          <p className="text-red-600 font-medium">エラー</p>
-          {errorMsg && <p className="mt-2 text-sm text-gray-600">{errorMsg}</p>}
+          <p className="text-2xl">⚠️</p>
+          <p className="mt-2 font-semibold text-red-600">エラー</p>
+          <p className="mt-1 text-sm text-gray-600">{errorMsg}</p>
         </div>
       </div>
     );
@@ -155,12 +169,16 @@ function MakeupInner() {
           <p className="text-xl font-semibold text-gray-800">振替が確定しました！</p>
           {selected && (
             <p className="mt-2 text-sm text-gray-600">
-              {formatDate(selected.date)} {selected.startTime}〜{selected.endTime}
+              {formatDate(selected.date)}&nbsp;
+              {selected.startTime}〜{selected.endTime}
             </p>
           )}
           <p className="mt-3 text-sm text-gray-500">先生とあなたにLINEでお知らせしました。</p>
-          <button type="button" onClick={() => window.liff?.closeWindow()}
-            className="mt-6 rounded bg-[#1E3A5F] px-6 py-2 text-sm font-semibold text-white">
+          <button
+            type="button"
+            onClick={() => window.liff?.closeWindow()}
+            className="mt-6 rounded bg-[#1E3A5F] px-6 py-2 text-sm font-semibold text-white hover:bg-[#17304D]"
+          >
             閉じる
           </button>
         </div>
@@ -181,12 +199,19 @@ function MakeupInner() {
           </div>
           {errorMsg && <p className="mt-3 text-sm text-red-600">{errorMsg}</p>}
           <div className="mt-6 flex gap-3">
-            <button type="button" onClick={() => setStep("select")}
-              className="flex-1 rounded border border-gray-300 py-3 text-sm font-medium text-gray-700">
+            <button
+              type="button"
+              onClick={() => setStep("select")}
+              className="flex-1 rounded border border-gray-300 py-3 text-sm font-medium text-gray-700"
+            >
               戻る
             </button>
-            <button type="button" onClick={() => void handleBook()} disabled={isBooking}
-              className="flex-1 rounded bg-[#1E3A5F] py-3 text-sm font-semibold text-white disabled:opacity-60">
+            <button
+              type="button"
+              onClick={() => void handleBook()}
+              disabled={isBooking}
+              className="flex-1 rounded bg-[#1E3A5F] py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
               {isBooking ? "予約中..." : "確定する"}
             </button>
           </div>
@@ -207,7 +232,9 @@ function MakeupInner() {
         <p className="mt-1 text-sm text-gray-500">空き枠の中から希望の日時を選んでください。</p>
 
         {dates.length === 0 && (
-          <p className="mt-6 text-sm text-gray-500">現在、振替可能な空き枠がありません。先生にご確認ください。</p>
+          <p className="mt-6 text-sm text-gray-500">
+            現在、振替可能な空き枠がありません。先生にご確認ください。
+          </p>
         )}
 
         <div className="mt-6 space-y-4">
@@ -236,7 +263,13 @@ function MakeupInner() {
 
 export default function MakeupPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p className="text-sm text-gray-500">読み込み中...</p></div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-sm text-gray-500">読み込み中...</p>
+        </div>
+      }
+    >
       <MakeupInner />
     </Suspense>
   );

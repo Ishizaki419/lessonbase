@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
 declare global {
@@ -11,107 +10,107 @@ declare global {
       isLoggedIn: () => boolean;
       login: () => void;
       getProfile: () => Promise<{ userId: string; displayName: string }>;
+      closeWindow: () => void;
     };
   }
 }
 
-function AbsenceReportInner() {
-  const searchParams = useSearchParams();
+type Step = "loading" | "form" | "done" | "error" | "not_linked";
 
-  const [step, setStep] = useState<"loading" | "form" | "done" | "error">("loading");
-  const [lineUserId, setLineUserId] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState<string>("");
+function AbsenceReportInner() {
+  const [step, setStep] = useState<Step>("loading");
+  const [displayName, setDisplayName] = useState("");
   const [studentId, setStudentId] = useState<string | null>(null);
   const [schoolId, setSchoolId] = useState<string | null>(null);
-  const [absenceDate, setAbsenceDate] = useState(() => {
-    const t = new Date();
-    return t.toISOString().slice(0, 10);
-  });
+  const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const initialized = useRef(false);
 
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID ?? "";
 
-  useEffect(() => {
-    // パラメータ解析（LIFF の liff.state を含む）
-    const getParam = (key: string): string | null => {
-      const sp = searchParams.get(key);
-      if (sp) return sp;
-      if (typeof window === "undefined") return null;
-      const raw = window.location.search;
-      const u = new URLSearchParams(raw);
-      const v = u.get(key);
-      if (v) return v;
-      // liff.state
-      const state = u.get("liff.state");
-      if (state) {
-        const decoded = decodeURIComponent(state);
-        const stateU = new URLSearchParams(decoded.startsWith("?") ? decoded.slice(1) : decoded);
-        return stateU.get(key);
-      }
-      return null;
-    };
-
-    setStudentId(getParam("studentId"));
-    setSchoolId(getParam("schoolId"));
-
-    const initLiff = async () => {
-      if (!liffId) { setStep("error"); setErrorMsg("LIFF IDが設定されていません"); return; }
-      try {
-        await window.liff.init({ liffId });
-        if (!window.liff.isLoggedIn()) { window.liff.login(); return; }
-        const profile = await window.liff.getProfile();
-        setLineUserId(profile.userId);
-        setDisplayName(profile.displayName);
-        setStep("form");
-      } catch (err) {
-        console.error(err);
-        setStep("error");
-        setErrorMsg("LINE初期化に失敗しました");
-      }
-    };
-
-    if (typeof window !== "undefined" && window.liff) {
-      void initLiff();
+  /** URL / liff.state から schoolId を取得 */
+  const getSchoolId = (): string | null => {
+    if (typeof window === "undefined") return null;
+    const u = new URLSearchParams(window.location.search);
+    let sid = u.get("schoolId");
+    if (sid) return sid;
+    const state = u.get("liff.state");
+    if (state) {
+      const decoded = decodeURIComponent(state);
+      const su = new URLSearchParams(decoded.startsWith("?") ? decoded.slice(1) : decoded);
+      sid = su.get("schoolId");
+      if (sid) return sid;
+      // /absence-report?schoolId=xxx の形式
+      const pathPart = decoded.split("?")[1];
+      if (pathPart) return new URLSearchParams(pathPart).get("schoolId");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return null;
+  };
 
-  const handleLiffReady = () => {
-    const initLiff = async () => {
-      if (!liffId) { setStep("error"); return; }
-      try {
-        await window.liff.init({ liffId });
-        if (!window.liff.isLoggedIn()) { window.liff.login(); return; }
-        const profile = await window.liff.getProfile();
-        setLineUserId(profile.userId);
-        setDisplayName(profile.displayName);
-        setStep("form");
-      } catch { setStep("error"); }
-    };
-    void initLiff();
+  const initLiff = async () => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    if (!liffId) {
+      setStep("error");
+      setErrorMsg("LIFF IDが設定されていません。管理者にお問い合わせください。");
+      return;
+    }
+
+    try {
+      await window.liff.init({ liffId });
+
+      if (!window.liff.isLoggedIn()) {
+        window.liff.login();
+        return;
+      }
+
+      const profile = await window.liff.getProfile();
+      const sid = getSchoolId();
+
+      if (!sid) {
+        setStep("error");
+        setErrorMsg("URLが正しくありません。先生から受け取ったリンクを開いてください。");
+        return;
+      }
+
+      setSchoolId(sid);
+      setDisplayName(profile.displayName);
+
+      // LINE User ID から生徒を検索
+      const res = await fetch(`/api/students/by-line?lineUserId=${profile.userId}&schoolId=${sid}`);
+      const json = (await res.json()) as { ok: boolean; studentId?: string; name?: string; error?: string };
+
+      if (!json.ok || !json.studentId) {
+        setStep("not_linked");
+        return;
+      }
+
+      setStudentId(json.studentId);
+      setStep("form");
+    } catch (err) {
+      console.error("LIFF init error:", err);
+      setStep("error");
+      setErrorMsg("LINE初期化に失敗しました。もう一度お試しください。");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentId || !schoolId) return;
     setIsSubmitting(true);
     setErrorMsg(null);
-
-    if (!studentId || !schoolId || !lineUserId) {
-      setErrorMsg("必要な情報が取得できませんでした。URLを確認してください。");
-      setIsSubmitting(false);
-      return;
-    }
 
     const res = await fetch("/api/absences", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schoolId, studentId, absenceDate, reason })
     });
-    const json = (await res.json()) as { ok?: boolean; absenceId?: string; error?: string; alreadyExists?: boolean };
-
+    const json = (await res.json()) as { ok?: boolean; error?: string };
     setIsSubmitting(false);
+
     if (!json.ok) {
       setErrorMsg(json.error ?? "送信に失敗しました");
       return;
@@ -122,8 +121,11 @@ function AbsenceReportInner() {
   if (step === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" onReady={handleLiffReady} />
-        <p className="text-sm text-gray-500">LINE初期化中...</p>
+        <Script
+          src="https://static.line-scdn.net/liff/edge/2/sdk.js"
+          onReady={() => { void initLiff(); }}
+        />
+        <p className="text-sm text-gray-500">LINE 初期化中...</p>
       </div>
     );
   }
@@ -133,8 +135,24 @@ function AbsenceReportInner() {
       <div className="flex min-h-screen items-center justify-center bg-white p-6">
         <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" />
         <div className="max-w-sm text-center">
-          <p className="text-red-600 font-medium">エラーが発生しました</p>
-          {errorMsg && <p className="mt-2 text-sm text-gray-600">{errorMsg}</p>}
+          <p className="text-2xl">⚠️</p>
+          <p className="mt-2 font-semibold text-red-600">エラーが発生しました</p>
+          <p className="mt-1 text-sm text-gray-600">{errorMsg}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "not_linked") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white p-6">
+        <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" />
+        <div className="max-w-sm text-center">
+          <p className="text-2xl">🔗</p>
+          <p className="mt-2 font-semibold text-gray-800">LINE連携が必要です</p>
+          <p className="mt-1 text-sm text-gray-600">
+            先生に「LINE連携」の設定をお願いしてください。
+          </p>
         </div>
       </div>
     );
@@ -147,12 +165,20 @@ function AbsenceReportInner() {
         <div className="max-w-sm text-center">
           <div className="mb-4 text-5xl">✅</div>
           <p className="text-xl font-semibold text-gray-800">欠席連絡を送信しました</p>
-          <p className="mt-2 text-sm text-gray-500">先生に通知が届きました。振替日はLINEでご連絡します。</p>
+          <p className="mt-2 text-sm text-gray-500">先生に通知が届きました。振替日はご連絡します。</p>
+          <button
+            type="button"
+            onClick={() => window.liff?.closeWindow()}
+            className="mt-6 rounded bg-[#1E3A5F] px-6 py-2 text-sm font-semibold text-white hover:bg-[#17304D]"
+          >
+            閉じる
+          </button>
         </div>
       </div>
     );
   }
 
+  // step === "form"
   return (
     <div className="min-h-screen bg-white p-6">
       <Script src="https://static.line-scdn.net/liff/edge/2/sdk.js" />
@@ -164,7 +190,9 @@ function AbsenceReportInner() {
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">欠席する日 <span className="text-red-500">*</span></label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              欠席する日 <span className="text-red-500">*</span>
+            </label>
             <input
               type="date"
               value={absenceDate}
@@ -201,7 +229,13 @@ function AbsenceReportInner() {
 
 export default function AbsenceReportPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p className="text-sm text-gray-500">読み込み中...</p></div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-sm text-gray-500">読み込み中...</p>
+        </div>
+      }
+    >
       <AbsenceReportInner />
     </Suspense>
   );
