@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const { data, error } = await admin
     .from("absences")
     .select(`
-      id, absence_date, reason, status, created_at,
+      id, school_id, absence_date, reason, status, created_at,
       original_booking_id, makeup_booking_id,
       students ( id, name, line_user_id )
     `)

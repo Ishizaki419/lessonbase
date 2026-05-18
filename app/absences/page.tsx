@@ -8,6 +8,7 @@ import { useSchool } from "@/lib/hooks/useSchool";
 
 type AbsenceRow = {
   id: string;
+  school_id: string;
   absence_date: string;
   reason: string | null;
   status: "pending" | "scheduled" | "cancelled";
@@ -92,9 +93,10 @@ export default function AbsencesPage() {
     }
   };
 
-  const getMakeupUrl = (absenceId: string) => {
-    if (liffId) return `https://liff.line.me/${liffId}/makeup/${absenceId}`;
-    return `/makeup/${absenceId}`;
+  const getMakeupUrl = (absence: AbsenceRow) => {
+    const sid = absence.school_id;
+    if (liffId) return `https://liff.line.me/${liffId}/makeup/${absence.id}?schoolId=${sid}`;
+    return `/makeup/${absence.id}?schoolId=${sid}`;
   };
 
   const pendingCount = absences.filter((a) => a.status === "pending").length;
@@ -155,7 +157,7 @@ export default function AbsencesPage() {
                           {a.status === "pending" && (
                             <>
                               <a
-                                href={getMakeupUrl(a.id)}
+                                href={getMakeupUrl(a)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="rounded border border-[#1E3A5F] px-2.5 py-1 text-xs text-[#1E3A5F] hover:bg-blue-50"
@@ -163,7 +165,7 @@ export default function AbsencesPage() {
                                 振替URLを開く
                               </a>
                               <button type="button" onClick={() => {
-                                void navigator.clipboard.writeText(getMakeupUrl(a.id));
+                                void navigator.clipboard.writeText(getMakeupUrl(a));
                                 setInfoMsg("振替URLをコピーしました");
                               }}
                                 className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">

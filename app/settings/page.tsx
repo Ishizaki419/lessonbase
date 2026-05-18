@@ -553,6 +553,38 @@ export default function SettingsPage() {
                 </table>
               </div>
             </section>
+          {/* 欠席連絡URL */}
+          <section className="mt-8 rounded border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-medium text-gray-900">欠席連絡URL（生徒に共有）</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              このURLを生徒のLINEに送ってください。生徒がLINEで欠席連絡できるようになります。
+            </p>
+            {(() => {
+              const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+              const absenceUrl = liffId
+                ? `https://liff.line.me/${liffId}/absence-report?schoolId=${context.schoolId}`
+                : `${typeof window !== "undefined" ? window.location.origin : ""}/absence-report?schoolId=${context.schoolId}`;
+              return (
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={absenceUrl}
+                    className="flex-1 rounded border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(absenceUrl);
+                      setInfoMessage("URLをコピーしました");
+                    }}
+                    className="whitespace-nowrap rounded border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    コピー
+                  </button>
+                </div>
+              );
+            })()}
+          </section>
           </>
         )}
       </main>
