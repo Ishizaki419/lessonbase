@@ -389,6 +389,137 @@ export async function createRichMenu(
   return { ok: true, richMenuId: data.richMenuId };
 }
 
+/** 欠席連絡通知（先生向け） */
+export function buildAbsenceNotifyMessage(
+  studentName: string,
+  absenceDate: string,
+  reason: string,
+  absenceId: string,
+  schoolName: string,
+  schoolId?: string
+): LineFlexMessage {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID ?? "";
+  const query = schoolId ? `?schoolId=${schoolId}` : "";
+  const makeupUrl = liffId
+    ? `https://liff.line.me/${liffId}/makeup/${absenceId}${query}`
+    : `${appUrl}/makeup/${absenceId}${query}`;
+
+  return {
+    type: "flex",
+    altText: `【${schoolName}】${studentName}さんが欠席連絡をしました`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#E8A000",
+        contents: [
+          { type: "text", text: "欠席連絡", color: "#FFFFFF", size: "md", weight: "bold" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "box", layout: "horizontal",
+            contents: [
+              { type: "text", text: "生徒", size: "sm", color: "#888888", flex: 2 },
+              { type: "text", text: studentName, size: "sm", color: "#111111", flex: 3 }
+            ]
+          },
+          {
+            type: "box", layout: "horizontal",
+            contents: [
+              { type: "text", text: "欠席日", size: "sm", color: "#888888", flex: 2 },
+              { type: "text", text: absenceDate, size: "sm", color: "#111111", flex: 3 }
+            ]
+          },
+          ...(reason ? [{
+            type: "box" as const, layout: "horizontal" as const,
+            contents: [
+              { type: "text" as const, text: "理由", size: "sm" as const, color: "#888888", flex: 2 },
+              { type: "text" as const, text: reason, size: "sm" as const, color: "#111111", flex: 3, wrap: true }
+            ]
+          }] : [])
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#1E3A5F",
+            action: {
+              type: "uri",
+              label: "振替日を送る",
+              uri: makeupUrl
+            }
+          }
+        ]
+      }
+    }
+  };
+}
+
+/** 振替確定通知（生徒・先生共通） */
+export function buildMakeupConfirmedMessage(
+  studentName: string,
+  bookingDate: string,
+  startTime: string,
+  endTime: string,
+  schoolName: string
+): LineFlexMessage {
+  return {
+    type: "flex",
+    altText: `【${schoolName}】振替レッスンが確定しました`,
+    contents: {
+      type: "bubble",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#1E3A5F",
+        contents: [
+          { type: "text", text: "振替レッスン確定", color: "#FFFFFF", size: "md", weight: "bold" }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          { type: "text", text: `${studentName} 様`, size: "sm", color: "#333333" },
+          { type: "separator" },
+          {
+            type: "box", layout: "horizontal",
+            contents: [
+              { type: "text", text: "日付", size: "sm", color: "#888888", flex: 2 },
+              { type: "text", text: bookingDate, size: "sm", color: "#111111", flex: 3 }
+            ]
+          },
+          {
+            type: "box", layout: "horizontal",
+            contents: [
+              { type: "text", text: "時間", size: "sm", color: "#888888", flex: 2 },
+              { type: "text", text: `${startTime} 〜 ${endTime}`, size: "sm", color: "#111111", flex: 3 }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: "box", layout: "vertical",
+        contents: [
+          { type: "text", text: schoolName, size: "xs", color: "#aaaaaa", align: "center" }
+        ]
+      }
+    }
+  };
+}
+
 /** リッチメニューに画像をアップロード（PNG/JPEG, Base64文字列） */
 export async function uploadRichMenuImage(
   richMenuId: string,

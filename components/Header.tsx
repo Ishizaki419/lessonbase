@@ -15,6 +15,8 @@ export function Header({ onLogout, isLoggingOut = false }: HeaderProps) {
     { href: "/students", label: "生徒管理" },
     { href: "/bookings", label: "予約管理" },
     { href: "/payments", label: "月謝管理" },
+    { href: "/absences", label: "欠席管理" },
+    { href: "/availability", label: "枠設定" },
     { href: "/settings", label: "設定" }
   ];
 

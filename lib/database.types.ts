@@ -13,6 +13,8 @@ export type Database = {
           end_time: string;
           memo: string | null;
           status: "確定" | "キャンセル" | "完了";
+          is_makeup: boolean;
+          absence_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -24,6 +26,8 @@ export type Database = {
           end_time: string;
           memo?: string | null;
           status: "確定" | "キャンセル" | "完了";
+          is_makeup?: boolean;
+          absence_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -35,6 +39,8 @@ export type Database = {
           end_time?: string;
           memo?: string | null;
           status?: "確定" | "キャンセル" | "完了";
+          is_makeup?: boolean;
+          absence_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -267,6 +273,96 @@ export type Database = {
             referencedColumns: ["id"];
           }
         ];
+      };
+      teacher_availability: {
+        Row: {
+          id: string;
+          school_id: string;
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+          lesson_duration_minutes: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id: string;
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+          lesson_duration_minutes?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string;
+          day_of_week?: number;
+          start_time?: string;
+          end_time?: string;
+          lesson_duration_minutes?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      school_closed_days: {
+        Row: {
+          id: string;
+          school_id: string;
+          closed_date: string;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id: string;
+          closed_date: string;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string;
+          closed_date?: string;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      absences: {
+        Row: {
+          id: string;
+          school_id: string;
+          student_id: string;
+          original_booking_id: string | null;
+          absence_date: string;
+          reason: string | null;
+          makeup_booking_id: string | null;
+          status: "pending" | "scheduled" | "cancelled";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          school_id: string;
+          student_id: string;
+          original_booking_id?: string | null;
+          absence_date: string;
+          reason?: string | null;
+          makeup_booking_id?: string | null;
+          status?: "pending" | "scheduled" | "cancelled";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          school_id?: string;
+          student_id?: string;
+          original_booking_id?: string | null;
+          absence_date?: string;
+          reason?: string | null;
+          makeup_booking_id?: string | null;
+          status?: "pending" | "scheduled" | "cancelled";
+          created_at?: string;
+        };
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
