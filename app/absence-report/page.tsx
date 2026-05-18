@@ -3,17 +3,6 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
-declare global {
-  interface Window {
-    liff: {
-      init: (opts: { liffId: string }) => Promise<void>;
-      isLoggedIn: () => boolean;
-      login: () => void;
-      getProfile: () => Promise<{ userId: string; displayName: string }>;
-      closeWindow: () => void;
-    };
-  }
-}
 
 type Step = "loading" | "form" | "done" | "error" | "not_linked";
 

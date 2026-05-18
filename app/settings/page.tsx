@@ -8,18 +8,6 @@ import { Header } from "@/components/Header";
 import { useClientSupabase } from "@/lib/hooks/useClientSupabase";
 import { useSchool } from "@/lib/hooks/useSchool";
 
-declare global {
-  interface Window {
-    liff: {
-      init: (opts: { liffId: string }) => Promise<void>;
-      isLoggedIn: () => boolean;
-      login: () => void;
-      getProfile: () => Promise<{ userId: string; displayName: string }>;
-      getIDToken: () => string | null;
-      closeWindow: () => void;
-    };
-  }
-}
 
 type MemberRow = {
   id: string;

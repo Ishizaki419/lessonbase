@@ -13,18 +13,6 @@ import { useSearchParams } from "next/navigation";
 
 type Status = "loading" | "ready" | "connecting" | "success" | "already" | "error";
 
-declare global {
-  interface Window {
-    liff: {
-      init: (opts: { liffId: string }) => Promise<void>;
-      isLoggedIn: () => boolean;
-      login: () => void;
-      getProfile: () => Promise<{ userId: string; displayName: string }>;
-      getIDToken: () => string | null;
-      closeWindow: () => void;
-    };
-  }
-}
 
 function LineConnectContent({ onLiffLoad }: { onLiffLoad: () => void }) {
   const searchParams = useSearchParams();

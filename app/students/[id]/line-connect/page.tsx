@@ -12,18 +12,6 @@ import { useParams } from "next/navigation";
 
 type Status = "loading" | "ready" | "connecting" | "success" | "already" | "error";
 
-declare global {
-  interface Window {
-    liff: {
-      init: (opts: { liffId: string }) => Promise<void>;
-      isLoggedIn: () => boolean;
-      login: () => void;
-      getProfile: () => Promise<{ userId: string; displayName: string }>;
-      getIDToken: () => string | null;
-      closeWindow: () => void;
-    };
-  }
-}
 
 export default function LineConnectPage() {
   const params = useParams();

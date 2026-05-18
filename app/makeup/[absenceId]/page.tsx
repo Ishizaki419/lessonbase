@@ -5,16 +5,6 @@ import { useParams } from "next/navigation";
 import Script from "next/script";
 import type { AvailableSlot } from "@/app/api/availability/slots/route";
 
-declare global {
-  interface Window {
-    liff: {
-      init: (opts: { liffId: string }) => Promise<void>;
-      isLoggedIn: () => boolean;
-      login: () => void;
-      closeWindow: () => void;
-    };
-  }
-}
 
 const DAYS_JP = ["日", "月", "火", "水", "木", "金", "土"];
 
