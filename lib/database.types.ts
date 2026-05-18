@@ -57,6 +57,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "schools";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bookings_absence_id_fkey";
+            columns: ["absence_id"];
+            isOneToOne: false;
+            referencedRelation: "absences";
+            referencedColumns: ["id"];
           }
         ];
       };
@@ -302,7 +309,15 @@ export type Database = {
           lesson_duration_minutes?: number;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "teacher_availability_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       school_closed_days: {
         Row: {
@@ -326,7 +341,15 @@ export type Database = {
           reason?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "school_closed_days_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       absences: {
         Row: {
@@ -362,7 +385,36 @@ export type Database = {
           status?: "pending" | "scheduled" | "cancelled";
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "absences_school_id_fkey";
+            columns: ["school_id"];
+            isOneToOne: false;
+            referencedRelation: "schools";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "absences_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "absences_original_booking_id_fkey";
+            columns: ["original_booking_id"];
+            isOneToOne: false;
+            referencedRelation: "bookings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "absences_makeup_booking_id_fkey";
+            columns: ["makeup_booking_id"];
+            isOneToOne: false;
+            referencedRelation: "bookings";
+            referencedColumns: ["id"];
+          }
+        ];
       };
     };
     Views: Record<string, never>;
